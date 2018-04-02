@@ -104,4 +104,15 @@ struct node *create_node(char *address);
 struct node *get_own_node();
 void *thread_wait_for_msg(void *n);
 void *thread_periodic(void *n);
+int notify(struct node *target);
+nodeid_t join(struct node *src, struct node *target);
+
+static int get_mod_of_hash(unsigned char *hash,int modulo) {
+    int remainder = 0;
+    for (int i = 0;  i < HASH_DIGEST_SIZE; ++i)
+    {
+        remainder = (remainder * 10 + hash[i]) % modulo;
+    }
+    return remainder;
+}
 #endif

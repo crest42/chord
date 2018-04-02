@@ -64,33 +64,33 @@ static char *msg_to_string(chord_msg_t msg) {
     switch(msg) {
         case MSG_TYPE_GET_PREDECESSOR:
             return "MSG_TYPE_GET_PREDECESSOR";
-             case MSG_TYPE_GET_PREDECESSOR_RESP:
+        case MSG_TYPE_GET_PREDECESSOR_RESP:
             return "MSG_TYPE_GET_PREDECESSOR_RESP";
-            case MSG_TYPE_GET_PREDECESSOR_RESP_NULL:
-                return "MSG_TYPE_GET_PREDECESSOR_RESP_NULL";
-            case MSG_TYPE_FIND_SUCCESSOR:
-                return "MSG_TYPE_FIND_SUCCESSOR";
-            case MSG_TYPE_FIND_SUCCESSOR_RESP:
-                return "MSG_TYPE_FIND_SUCCESSOR_RESP";
-            case MSG_TYPE_FIND_SUCCESSOR_RESP_NEXT:
+        case MSG_TYPE_GET_PREDECESSOR_RESP_NULL:
+            return "MSG_TYPE_GET_PREDECESSOR_RESP_NULL";
+        case MSG_TYPE_FIND_SUCCESSOR:
+            return "MSG_TYPE_FIND_SUCCESSOR";
+        case MSG_TYPE_FIND_SUCCESSOR_RESP:
+            return "MSG_TYPE_FIND_SUCCESSOR_RESP";
+        case MSG_TYPE_FIND_SUCCESSOR_RESP_NEXT:
             return "MSG_TYPE_FIND_SUCCESSOR_RESP_NEXT";
-            case MSG_TYPE_GET_SUCCESSOR:
+        case MSG_TYPE_GET_SUCCESSOR:
             return "MSG_TYPE_GET_SUCCESSOR";
-            case MSG_TYPE_GET_SUCCESSOR_RESP:
+        case MSG_TYPE_GET_SUCCESSOR_RESP:
             return "MSG_TYPE_GET_SUCCESSOR_RESP";
-            case MSG_TYPE_PING:
-                return "MSG_TYPE_PING";
-                case MSG_TYPE_PONG:
-                return "MSG_TYPE_PONG";
-                case MSG_TYPE_NO_WAIT:
-                    return "MSG_TYPE_NOTIFY";
-                    case MSG_TYPE_NOTIFY:
-                        return "MSG_TYPE_NOTIFY";
-                    default:
-                        return "UNKNOWN";
-
+        case MSG_TYPE_PING:
+            return "MSG_TYPE_PING";
+        case MSG_TYPE_PONG:
+            return "MSG_TYPE_PONG";
+        case MSG_TYPE_NO_WAIT:
+            return "MSG_TYPE_NOTIFY";
+        case MSG_TYPE_NOTIFY:
+            return "MSG_TYPE_NOTIFY";
+        default:
+            return "UNKNOWN";
         }
 }
+
 static char *craft_message(chord_msg_t msg_type, nodeid_t dst_id, size_t size, char *content) {
     DEBUG("craft msg %s with size %d\n",msg_to_string(msg_type),size);
     char *msg = malloc(CHORD_HEADER_SIZE + size);
@@ -211,46 +211,6 @@ static int chord_send_block_and_wait(struct node *target, char *msg, size_t size
     return type;
 }
 
-static int chord_send_block(struct node *target, char *msg, size_t size) {
-    int send = 0;
-    while(send != size) {
-        int ret = chord_send_nonblock(target, msg-send, size-send);
-        if(ret != -1) {
-            send += ret;
-        } else {
-            perror("Error in send");
-            return CHORD_ERR;
-        }
-    }
-    return CHORD_OK;
-}
-
-/*static int send_predeccessor(struct node *target,nodeid_t id) {
-    char *msg = craft_message(MSG_TYPE_GET_PREDECESSOR_RESP, sizeof(id), (char *)&id);
-    if(chord_send_nonblock(target, msg,CHORD_HEADER_SIZE + CHORD_GET_PREDECESSOR_RESP_SIZE) != CHORD_OK) {
-        DEBUG("Error while sending MSG_TYPE_GET_PREDECESSOR_RESP nonblocking\n");
-    }
-    free_message(msg);
-}*/
-
-/*static int send_successor(struct node *target,nodeid_t id) {
-    char *msg = craft_message(MSG_TYPE_GET_PREDECESSOR_RESP, sizeof(id), (char *)&id);
-    if(chord_send_nonblock(target, msg,CHORD_HEADER_SIZE + CHORD_GET_PREDECESSOR_RESP_SIZE) != CHORD_OK) {
-        DEBUG("Error while sending MSG_TYPE_GET_PREDECESSOR_RESP nonblocking\n");
-    }
-    free_message(msg);
-}*/
-
-static int chord_send_msg(struct node *target,chord_msg_t msg_type) {
-    switch(msg_type) {
-      default:
-          DEBUG("Msg Type %d unknown\n",msg_type);
-          return CHORD_ERR;
-      }
-      return CHORD_OK;
-}
-
-
 static struct node *find_successor_in_fingertable(nodeid_t nodeid) {
     for (int i = 0; i < FINGERTABLE_SIZE;i++) {
         if(fingertable[i].node && nodeid < fingertable[i].node->id) {
@@ -271,6 +231,7 @@ struct node *find_successor(struct node *target,nodeid_t id) {
             return NULL;
         }
         chord_msg_t type = chord_send_block_and_wait(target, msg, CHORD_HEADER_SIZE + CHORD_FIND_SUCCESSOR_SIZE, MSG_TYPE_FIND_SUCCESSOR_RESP, (char *)node, sizeof(struct node));
+        free_message(msg);
         if (type == MSG_TYPE_FIND_SUCCESSOR_RESP_NEXT)
         {
             char *addr = malloc(INET6_ADDRSTRLEN);
@@ -286,69 +247,27 @@ struct node *find_successor(struct node *target,nodeid_t id) {
             return NULL;
         }
         i++;
-        free_message(msg);
     }
 
     nodeid_t ret_id = node->id;
-    DEBUG("got answer: %d\n", ret_id);
     if(ret_id == 0) {
         return NULL;
     }
     return final;
 }
-static int notify(struct node *target) {
+
+int notify(struct node *target) {
     char *msg = craft_message(MSG_TYPE_NOTIFY,target->id, sizeof(struct node),(char *)(&mynode));
     struct node *pre = malloc(sizeof(struct node));
     chord_msg_t type = chord_send_block_and_wait(target, msg, CHORD_HEADER_SIZE + sizeof(struct node),MSG_TYPE_NO_WAIT,NULL,0);
     free_message(msg);
 }
-static nodeid_t join(struct node *src, struct node *target) {
+
+nodeid_t join(struct node *src, struct node *target) {
     src->predecessor = NULL;
     src->successor = find_successor(target, src->id);
     notify(src->successor);
     return src->successor->id;
-}
-
-static int wait_for_resp(struct node *node, unsigned char *retbuf,size_t bufsize, chord_msg_t message) {
-    if(bufsize > CHORD_MSG_MAX_CONTENT_SIZE) {
-        bufsize = CHORD_MSG_MAX_CONTENT_SIZE;
-    }
-    unsigned char buf[MAX_MSG_SIZE];
-    struct sockaddr_storage src_addr;
-    struct sockaddr_in6 *addr_in6 = (struct sockaddr_in6 *)&src_addr;
-    socklen_t src_addr_len = sizeof(src_addr);
-    while (1)
-    {
-        int sock = accept(node->socket, (struct sockaddr *)&src_addr,&src_addr_len);
-        if(sock == -1) {
-            perror("accept");
-            return CHORD_ERR;
-        }
-        int ret = read(sock, buf, MAX_MSG_SIZE);
-        if (ret < CHORD_HEADER_SIZE)
-        {
-            DEBUG("Error in recv (recieved) %d < (CHORD_HEADER_SIZE) %d: ",ret,CHORD_HEADER_SIZE);
-            perror("");
-            return CHORD_ERR;
-        }
-        chord_msg_t type = (chord_msg_t)buf[CHORD_MSG_COMMAND_SLOT];
-        nodeid_t src_id = (nodeid_t)buf[CHORD_MSG_SRC_ID_SLOT];
-        nodeid_t dst_id = (nodeid_t)buf[CHORD_MSG_SRC_ID_SLOT];
-        size_t size = (size_t)buf[CHORD_MSG_LENGTH_SLOT];
-        char *content = &buf[CHORD_HEADER_SIZE];
-        DEBUG("Got %s Request from %d to %d  with size %d\n", msg_to_string(type),src_id, dst_id, size);
-        if(type == message) {
-            if(size > 0) {
-                if(bufsize > 0 && bufsize <= size) {
-                    memcpy(retbuf, content, bufsize);
-                }
-            }
-            return 0;
-        } else {
-            return -1;
-        }
-    }
-    return -1;
 }
 
 static struct node *get_successor(struct node *src) {
@@ -420,13 +339,13 @@ static bool is_suc(nodeid_t id) {
     if(!mynode.successor) {
         return true;
     }
-    if(id >= mynode.successor->id) {
+    if(in_interval(&mynode,mynode.successor,id)) {
         return true;
     }
     return false;
 }
 
-static int generic_wait(struct node *node,unsigned char *retbuf,size_t bufsize, bool established) {
+static int generic_wait(struct node *node,unsigned char *retbuf,size_t bufsize) {
     chord_msg_t type = 0;
     size_t size = 0;
     int ret = 0;
@@ -476,23 +395,23 @@ static int generic_wait(struct node *node,unsigned char *retbuf,size_t bufsize, 
                     //mynode.predecessor = node;
                     char *msg = craft_message(MSG_TYPE_FIND_SUCCESSOR_RESP, src_id, CHORD_FIND_SUCCESSOR_RESP_SIZE, (char *)&mynode);
                     int ret = chord_send_nonblock_sock(sock, msg, CHORD_HEADER_SIZE + CHORD_FIND_SUCCESSOR_RESP_SIZE);
+                    free_message(msg);
                     if (ret == -1)
                     {
                         DEBUG("Error while sending MSG_TYPE_FIND_SUCCESSOR_RESP nonblocking");
                         perror("");
                     }
                     DEBUG("sended find successor resp %d size %d of %d\n", mynode.id, ret, CHORD_HEADER_SIZE + CHORD_FIND_SUCCESSOR_RESP_SIZE);
-                    free_message(msg);
                 }else if(mynode.successor && in_interval(&mynode,mynode.successor,req_id)) {
                     char *msg = craft_message(MSG_TYPE_FIND_SUCCESSOR_RESP, src_id, CHORD_FIND_SUCCESSOR_RESP_SIZE, (char *)mynode.successor);
                     int ret = chord_send_nonblock_sock(sock, msg, CHORD_HEADER_SIZE + CHORD_FIND_SUCCESSOR_RESP_SIZE);
+                    free_message(msg);
                     if (ret == -1)
                     {
                         DEBUG("Error while sending MSG_TYPE_FIND_SUCCESSOR_RESP nonblocking");
                         perror("");
                     }
                     DEBUG("sended find successor resp %d size %d of %d\n", mynode.id, ret, CHORD_HEADER_SIZE + CHORD_FIND_SUCCESSOR_RESP_SIZE);
-                    free_message(msg);
                 } else {
                         struct node *pre = find_successor_in_fingertable(req_id);
                         if(!pre && mynode.successor) {
@@ -504,20 +423,21 @@ static int generic_wait(struct node *node,unsigned char *retbuf,size_t bufsize, 
                         DEBUG("found suc with %d id\n", pre->id);
                         struct node *node = create_node(addr);
                         char *msg = craft_message(MSG_TYPE_FIND_SUCCESSOR_RESP_NEXT, node->id, sizeof(struct node), (char *)pre);
-                    int ret = chord_send_nonblock_sock(sock, msg, CHORD_HEADER_SIZE + CHORD_FIND_SUCCESSOR_RESP_SIZE);
-                    if (ret == -1)
-                    {
-                        DEBUG("Error while sending MSG_TYPE_FIND_SUCCESSOR_RESP_NEXT nonblocking");
-                        perror("");
-                    }
-                    DEBUG("sended find successor resp %d size %d\n", pre->id, ret);
-                    free_message(msg);
+                        free_message(msg);
+                        int ret = chord_send_nonblock_sock(sock, msg, CHORD_HEADER_SIZE + CHORD_FIND_SUCCESSOR_RESP_SIZE);
+                        if (ret == -1)
+                        {
+                            DEBUG("Error while sending MSG_TYPE_FIND_SUCCESSOR_RESP_NEXT nonblocking");
+                            perror("");
+                        }
+                        DEBUG("sended find successor resp %d size %d\n", pre->id, ret);
                 }
                 break;
             }
             case MSG_TYPE_PING: {
                     char *msg = craft_message(MSG_TYPE_PONG, src_id, CHORD_PING_SIZE, (char *)&(mynode.id));
                     int ret = chord_send_nonblock_sock(sock, msg, CHORD_HEADER_SIZE + CHORD_PING_SIZE);
+                    free_message(msg);
                 break;
             }
             case MSG_TYPE_GET_PREDECESSOR:
@@ -525,6 +445,7 @@ static int generic_wait(struct node *node,unsigned char *retbuf,size_t bufsize, 
                 if(mynode.predecessor) {
                     char *msg = craft_message(MSG_TYPE_GET_PREDECESSOR_RESP, src_id, sizeof(struct node), (char *)mynode.predecessor);
                     int ret = chord_send_nonblock_sock(sock, msg, CHORD_HEADER_SIZE + CHORD_FIND_SUCCESSOR_RESP_SIZE);
+                    free_message(msg);
                     if (ret == -1)
                     {
                     DEBUG("Error while sending MSG_TYPE_FIND_SUCCESSOR_RESP_NEXT nonblocking");
@@ -533,6 +454,7 @@ static int generic_wait(struct node *node,unsigned char *retbuf,size_t bufsize, 
                 } else {
                     char *msg = craft_message(MSG_TYPE_GET_PREDECESSOR_RESP_NULL, src_id, 0, NULL);
                 int ret = chord_send_nonblock_sock(sock, msg, CHORD_HEADER_SIZE);
+                free_message(msg);
                 if (ret == -1)
                 {
                   DEBUG("Error while sending MSG_TYPE_FIND_SUCCESSOR_RESP_NEXT nonblocking");
@@ -564,12 +486,8 @@ static int generic_wait(struct node *node,unsigned char *retbuf,size_t bufsize, 
     return CHORD_ERR;
 }
 
-static int wait_for_answer(struct node *node,unsigned char *retbuf,size_t bufsize) {
-    return generic_wait(node, retbuf, bufsize, true);
-}
-
 static int wait_for_message(struct node *node,unsigned char *retbuf,size_t bufsize) {
-    return generic_wait(node, retbuf, bufsize, false);
+    return generic_wait(node, retbuf, bufsize);
 }
 
 static int stabilize(struct node *node) {
@@ -606,14 +524,6 @@ static int stabilize(struct node *node) {
         }
     }
     return CHORD_OK;
-}
-int get_mod_of_hash(unsigned char *hash,int modulo) {
-    int remainder = 0;
-    for (int i = 0;  i < HASH_DIGEST_SIZE; ++i)
-    {
-        remainder = (remainder * 10 + hash[i]) % modulo;
-    }
-    return remainder;
 }
 
 static int init_fingertable(nodeid_t id) {
@@ -678,13 +588,11 @@ struct node *create_node(char *address) {
     memcpy(&src, &(mynode.addr), sizeof(src));
     src.sin6_port = 0;
     bind(node->socket, (struct sockaddr *)&src,sizeof(struct sockaddr_in6));
-    //connect(node->socket, (struct sockaddr *)&node->addr, sizeof(node->addr));
     hash(node->hash_id,address,sizeof(address),sizeof(node->hash_id));
     node->id = get_mod_of_hash(node->hash_id,CHORD_RING_SIZE);
 
     return node;
 }
-
 
 int add_node(struct node *node) {
     if(node) {
@@ -706,13 +614,13 @@ static bool send_ping(struct node *node) {
     char *msg = craft_message(MSG_TYPE_PING,CHORD_PING_SIZE,node->id,(char *)(&(mynode.id)));
     nodeid_t retid = 0;
     chord_msg_t type = chord_send_block_and_wait(node, msg, CHORD_HEADER_SIZE + CHORD_FIND_SUCCESSOR_SIZE, MSG_TYPE_PONG, (char *)&retid, sizeof(nodeid_t));
+    free_message(msg);
     if (type == MSG_TYPE_PONG && retid == node->id)
     {
         return true;
     } else {
         return false;
     }
-    free_message(msg);
 }
 
 static void fix_fingers(struct node *node) {
