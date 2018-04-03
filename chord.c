@@ -20,13 +20,21 @@ static void debug_print_fingertable() {
 }
 static void debug_print_successorlist() {
         printf("successorlist of %d:\n",mynode.id);
-    for (int i = 0; i < FINGERTABLE_SIZE; i++)
-    {
-        if(successorlist[i]) {
-            printf("successor %d is: %d\n",i,successorlist[i]->id);
-        }else {
-            printf("successor %d is: null\n",i);
-        }
+        int myid = -1;
+        for (int i = 0; i < FINGERTABLE_SIZE; i++)
+        {
+            if (mynode.successor)
+            {
+                myid = ((mynode.successor->id + (i)) % CHORD_RING_SIZE);
+            }
+            if (successorlist[i])
+            {
+                printf("successor %d (>%d) is: %d\n", i, myid, successorlist[i]->id);
+            }
+            else
+            {
+                printf("successor %d (>%d) is: null\n", i,myid);
+            }
     }
 }
 
@@ -287,7 +295,7 @@ static int update_successorlist() {
     if(last) {
         for (int i = 0; i < FINGERTABLE_SIZE; i++)
         {
-            successorlist[i] = find_successor(last, last->id + 1);
+            successorlist[i] = find_successor(last, ((last->id + (i)) % CHORD_RING_SIZE));
         }
     }
 }
@@ -556,7 +564,7 @@ static int stabilize(struct node *node) {
             }
         } else {
             DEBUG("got error\n");
-            mynode.successor = NULL;
+            mynode.successor = successorlist[0];
             return CHORD_ERR;
         }
     }
@@ -690,6 +698,10 @@ static bool check_predecessor(struct node *node ){
     return send_ping(node->predecessor);
 }
 
+static bool check_successor(struct node *node ){
+    return send_ping(node->successor);
+}
+
 void *thread_wait_for_msg(void *n){
     int i = 0;
     struct node *node = (struct node *)n;
@@ -740,7 +752,18 @@ void *thread_periodic(void *n){
                     fingertable[i].node = NULL;
                 }
             }
-            mynode.predecessor = NULL;
+            mynode.predecessor = successorlist[0];
+        }
+        if (!check_successor(&mynode))
+        {
+            DEBUG("ERROR SUC Do not respond to ping\n");
+            for (int i = 0; i < FINGERTABLE_SIZE;i++) {
+                if(fingertable[i].node && fingertable[i].node->id == mynode.successor->id) {
+                    free(fingertable[i].node);
+                    fingertable[i].node = NULL;
+                }
+            }
+            mynode.successor = successorlist[0];
         }
         fix_fingers(&mynode);
         debug_print_node(&mynode);
