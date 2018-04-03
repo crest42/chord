@@ -7,6 +7,7 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <stddef.h>
+//#define DEBUG_ENABLE
 #ifdef DEBUG_ENABLE
 #define DEBUG(...) printf(__VA_ARGS__)
 #else
@@ -44,8 +45,8 @@ typedef uint16_t nodeid_t;
 #define CHORD_MSG_SRC_ID_SIZE (sizeof(nodeid_t))
 #define CHORD_MSG_SRC_ID_SLOT (CHORD_MSG_COMMAND_SLOT + CHORD_MSG_COMMAND_SIZE)
 #define CHORD_MSG_DST_ID_SIZE (sizeof(nodeid_t))
-#define CHORD_MSG_DST_ID_SLOT (CHORD_MSG_SRC_ID_SLOT + CHORD_MSG_SRC_ID_SLOT)
-#define CHORD_MSG_LENGTH_SIZE (4)
+#define CHORD_MSG_DST_ID_SLOT (CHORD_MSG_SRC_ID_SLOT + CHORD_MSG_SRC_ID_SIZE)
+#define CHORD_MSG_LENGTH_SIZE (sizeof(size_t))
 #define CHORD_MSG_LENGTH_SLOT (CHORD_MSG_DST_ID_SLOT + CHORD_MSG_DST_ID_SIZE)
 #define CHORD_HEADER_SIZE (CHORD_MSG_COMMAND_SIZE + CHORD_MSG_LENGTH_SIZE + CHORD_MSG_DST_ID_SIZE + CHORD_MSG_SRC_ID_SIZE)
 #define CHORD_MSG_MAX_CONTENT_SIZE (MAX_MSG_SIZE-CHORD_HEADER_SIZE)
@@ -95,6 +96,7 @@ struct key
 };
 static struct node mynode;
 struct fingertable_entry fingertable[FINGERTABLE_SIZE];
+struct node *successorlist[FINGERTABLE_SIZE];
 struct node *find_successor(struct node *node, nodeid_t id);
 
 int hash(unsigned char *out, const char *in,size_t in_size,size_t out_size);
