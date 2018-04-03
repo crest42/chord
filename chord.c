@@ -178,7 +178,8 @@ static int chord_send_block_and_wait(struct node *target, char *msg, size_t size
     if (connect(s, (struct sockaddr *)&tmpaddr, sizeof(struct sockaddr_in6)) == -1)
     {
         close(s);
-        perror("connect\n");
+        printf("connect %d",s);
+        perror("");
         if (errno == ECONNREFUSED)
         {
             return CHORD_ERR;
