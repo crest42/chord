@@ -3,6 +3,27 @@
 #include <unistd.h>
 #include <assert.h>
 
+bool node_is_null(struct node *node) {
+    if(node->id == 0 && node->successor == NULL && node->predecessor == NULL) {
+        return true;
+    }
+    return false;
+}
+
+struct node *get_own_node() {
+    return &mynode;
+}
+
+static int copy_node_static(struct node *node,struct node *copy) {
+    memcpy(copy, node, sizeof(struct node));
+    return CHORD_OK;
+}
+
+static int copy_node(struct node *node,struct node **copy) {
+    *copy = malloc(sizeof(struct node));
+    copy_node_static(node, *copy);
+    return CHORD_OK;
+}
 
 int get_mod_of_hash(unsigned char *hash,int modulo) {
     int remainder = 0;
@@ -37,9 +58,9 @@ static void debug_print_successorlist() {
             {
                 myid = ((mynode.successor->id + (i)) % CHORD_RING_SIZE);
             }
-            if (successorlist[i])
+            if (!node_is_null(&successorlist[i]))
             {
-                printf("successor %d (>%d) is: %d\n", i, myid, successorlist[i]->id);
+                printf("successor %d (>%d) is: %d\n", i, myid, successorlist[i].id);
             }
             else
             {
@@ -299,7 +320,13 @@ static int update_successorlist() {
     if(last) {
         for (int i = 0; i < FINGERTABLE_SIZE; i++)
         {
-            successorlist[i] = find_successor(last, ((last->id + (i)) % CHORD_RING_SIZE));
+            struct node *tmp = find_successor(last, ((last->id + (i)) % CHORD_RING_SIZE));
+            if(tmp) {
+                copy_node_static(tmp, &successorlist[i]);
+            } else {
+                memset(&successorlist[i], 0, sizeof(struct node));
+            }
+            free(tmp);
         }
     }
     return CHORD_OK;
@@ -574,7 +601,7 @@ static int stabilize(struct node *node) {
             }
         } else {
             DEBUG("got error\n");
-            mynode.successor = successorlist[0];
+            mynode.successor = &successorlist[0];
             return CHORD_ERR;
         }
     }
@@ -660,16 +687,6 @@ int add_node(struct node *node) {
     return CHORD_OK;
 }
 
-struct node *get_own_node() {
-    return &mynode;
-}
-
-static int copy_node(struct node *node,struct node **copy) {
-    *copy = malloc(sizeof(struct node));
-    memcpy(*copy, node, sizeof(struct node));
-    return CHORD_OK;
-}
-
 static bool send_ping(struct node *node) {
     if(!node) {
         return true;
@@ -748,8 +765,9 @@ void *thread_periodic(void *n){
         DEBUG("periodic: stabilze\n");
         stabilize(&mynode);
         if(factor == limit) {
-          update_successorlist();
-          factor = 0;
+            DEBUG("Update successorlist\n");
+            update_successorlist();
+            factor = 0;
         } else {
             factor++;
         }
@@ -763,7 +781,7 @@ void *thread_periodic(void *n){
                     fingertable[i].node = NULL;
                 }
             }
-            mynode.predecessor = successorlist[0];
+            mynode.predecessor = &successorlist[0];
         }
         if (!check_successor(&mynode))
         {
@@ -774,7 +792,7 @@ void *thread_periodic(void *n){
                     fingertable[i].node = NULL;
                 }
             }
-            mynode.successor = successorlist[0];
+            mynode.successor = &successorlist[0];
         }
         fix_fingers(&mynode);
         debug_print_node(&mynode,true);

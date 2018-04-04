@@ -7,7 +7,7 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <stddef.h>
-//#define DEBUG_ENABLE
+#define DEBUG_ENABLE
 #ifdef DEBUG_ENABLE
 #define DEBUG(...) printf(__VA_ARGS__)
 #else
@@ -97,7 +97,7 @@ struct key
 };
 struct node mynode;
 struct fingertable_entry fingertable[FINGERTABLE_SIZE];
-struct node *successorlist[FINGERTABLE_SIZE];
+struct node successorlist[FINGERTABLE_SIZE];
 struct node *find_successor(struct node *node, nodeid_t id);
 
 int hash(unsigned char *out, const char *in,size_t in_size,size_t out_size);
