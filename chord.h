@@ -37,9 +37,9 @@ typedef uint16_t nodeid_t;
 #define CHORD_PORT (6667)
 #endif
 #define CHORD_ERR (-1)
-#define CHORD_OK (0)
+#define  CHORD_OK (0)
 #define CHORD_BACKLOG_SIZE (10)
-#define CHORD_PERIODIC_SLEEP (5)
+#define CHORD_PERIODIC_SLEEP (1)
 #define CHORD_MSG_COMMAND_SLOT (0)
 #define CHORD_MSG_COMMAND_SIZE (sizeof(chord_msg_t))
 #define CHORD_MSG_SRC_ID_SIZE (sizeof(nodeid_t))
@@ -94,7 +94,7 @@ struct key
     struct node *successor;
     struct node *predecessor;
 };
-static struct node mynode;
+struct node mynode;
 struct fingertable_entry fingertable[FINGERTABLE_SIZE];
 struct node *successorlist[FINGERTABLE_SIZE];
 struct node *find_successor(struct node *node, nodeid_t id);
@@ -109,12 +109,4 @@ void *thread_periodic(void *n);
 int notify(struct node *target);
 nodeid_t join(struct node *src, struct node *target);
 
-static int get_mod_of_hash(unsigned char *hash,int modulo) {
-    int remainder = 0;
-    for (int i = 0;  i < HASH_DIGEST_SIZE; ++i)
-    {
-        remainder = (remainder * 10 + hash[i]) % modulo;
-    }
-    return remainder;
-}
 #endif

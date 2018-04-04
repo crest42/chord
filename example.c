@@ -5,7 +5,8 @@
 #include <openssl/sha.h>
 #include <unistd.h>
 int hash(unsigned char *out, const char *in,size_t in_size,size_t out_size){
-    SHA1(in, in_size, out);
+    SHA1((unsigned char *)in, in_size, out);
+    return 0;
 }
 
 static void print_usage() {
