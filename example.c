@@ -8,11 +8,24 @@ int hash(unsigned char *out, const char *in,size_t in_size,size_t out_size){
     SHA1((unsigned char *)in, in_size, out);
     return 0;
 }
+    pthread_t mythread1;
+    pthread_t mythread2;
+void sig_handler(int signo)
+{
+  if (signo == SIGINT) {
+      pthread_cancel(mythread1);
+      pthread_cancel(mythread2);
+      debug_print_node(&mynode,false);
+      fflush(stdout);
+      exit(1);
+  }
+}
 
 static void print_usage() {
     printf("Usage\n\t./example master <bind addr>\n\t./example slave <master addr>\n");
 }
 int main(int argc, char *argv[]) {
+    signal(SIGINT, sig_handler);
     char buf[INET6_ADDRSTRLEN];
     char nodeip[INET6_ADDRSTRLEN];
     memset(nodeip, 0, INET6_ADDRSTRLEN);
@@ -56,8 +69,6 @@ int main(int argc, char *argv[]) {
         struct node *partner = create_node(masterip);
         add_node(partner);
     }
-    pthread_t mythread1;
-    pthread_t mythread2;
     void *ret;
     printf("create eventloop thread\n");
     pthread_create(&mythread1, NULL, thread_wait_for_msg, (void *)mynode);

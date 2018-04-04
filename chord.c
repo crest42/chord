@@ -48,7 +48,7 @@ static void debug_print_successorlist() {
     }
 }
 
-static void debug_print_node(struct node *node) {
+void debug_print_node(struct node *node,bool verbose) {
     if(node->predecessor) {
         printf("%d",node->predecessor->id);
     } else {
@@ -61,8 +61,10 @@ static void debug_print_node(struct node *node) {
         printf("NULL");
     }
     printf("\n");
-    debug_print_fingertable();
-    debug_print_successorlist();
+    if(verbose) {
+      debug_print_fingertable();
+      debug_print_successorlist();
+    }
 }
 
 static int bind_socket(const char *node_addr,struct node *node) {
@@ -775,7 +777,7 @@ void *thread_periodic(void *n){
             mynode.successor = successorlist[0];
         }
         fix_fingers(&mynode);
-        debug_print_node(&mynode);
+        debug_print_node(&mynode,true);
         sleep(CHORD_PERIODIC_SLEEP);
     }
     return NULL;

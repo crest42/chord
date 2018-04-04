@@ -1,2 +1,101 @@
 #!/bin/bash
-true
+function remove_addr {
+  for i in $(seq 0 $NODES); do
+    ifconfig $LO inet6 del ${ADDR[$i]}
+  done
+}
+
+function kill_nodes {
+  for i in $(seq 0 $NODES); do
+    kill -INT ${NODEPID[$i]}
+  done
+}
+
+function kill_helper {
+  kill_nodes
+  remove_addr
+  exit 1;
+}
+
+function check_output {
+  for i in $(seq 0 $NODES); do
+    HASH=${ADDR[$i]}
+    OUT[$i]=$($TAIL -n 1 ${NODEOUT[$i]})
+    rm -f ${NODEOUT[$i]}
+    echo "Node $HASH exit with out ${OUT[$i]}"
+  done
+  OUT_SORT=( $( printf "%s\n" "${OUT[@]}" | sort -n ) )
+  FIRST=$(echo ${OUT_SORT[-1]} | perl -n -e'/(\d+)<-(\d+)->(\d+)/ && print $2')
+  LAST=$(echo ${OUT_SORT[-1]} | perl -n -e'/(\d+)<-(\d+)->(\d+)/ && print $1')
+  #echo -n "$FIRST->"
+  # echo ${OUT_SORT[-1]}
+  HELPER=$(($NODES-1))
+  LASTELEM=0
+  for i in $(seq 0 $HELPER); do
+    CUR_NODE=${OUT_SORT[$i]}
+    BEFORE=$(echo $CUR_NODE | perl -n -e'/(\d+)<-(\d+)->(\d+)/ && print $1')
+    ME=$(echo $CUR_NODE | perl -n -e'/(\d+)<-(\d+)->(\d+)/ && print $2')
+    AFTER=$(echo $CUR_NODE | perl -n -e'/(\d+)<-(\d+)->(\d+)/ && print $3')
+    #echo ${OUT_SORT[$i]}
+    if [[ "$ME" == "$LAST" ]];then
+      if [[ $i -ne $HELPER ]]; then
+        echo "ERROR: Node $CUR_NODE is last Element ($LAST), but index is only $i/$HELPER"
+        exit 1;
+      else
+        echo "SUCCESS: Chord ring is correct"
+      fi
+    else
+       if [[ !($ME -gt $LASTELEM) ]]; then
+         echo "ERROR: Node $CUR_NODE is lower equal ($LASTELEM)"
+       fi
+    fi
+    LASTELEM=$ME
+  done
+}
+
+NODES=$1
+ADDR=()
+NODEPID=()
+NODEOUT=()
+TAIL=$(which tail)
+if [[ -z $NODES ]]; then
+  NODES=3
+fi
+NODES=$(($NODES-1))
+if [[ ! $TAIL ]]; then
+  echo "No tail command found"
+  exit 1
+fi
+#TODO CHeck max nodes
+LO=$(ip -o link show | awk '/^([0-9]+):\s([a-zA-Z0-9]+).+loopback.+$/{print $2}' | tr -d ':')
+if [[ ! $LO ]]; then
+  echo "No Loopback Interface found\n"
+  exit 1
+fi
+echo "Loopback is $LO"
+echo "Set up Addresses for $NODES hosts"
+STARTADDR=2
+for i in $(seq 0 $NODES); do
+  HEX=$(printf "%04X\n" $STARTADDR)
+  STARTADDR=$(($STARTADDR+1))
+  ADDR[$i]="::${HEX}"
+  ifconfig $LO inet6 add ${ADDR[$i]}
+  echo "Added Addr $i: ${ADDR[$i]}"
+  NODEOUT[$i]=$(mktemp)
+  if [[ $i -eq 0 ]]; then
+    echo "Start master with ${ARGV[$i]}"
+    ./example master ${ADDR[$i]} > ${NODEOUT[$i]} &
+  else
+    echo "Start slave ${ADDR[$i]} with master ${ADDR[0]}"
+   ./example slave ${ADDR[$i]} ${ADDR[0]} > ${NODEOUT[$i]} &
+  fi
+  NODEPID[$i]=$!
+done
+trap "kill_helper" INT
+
+SLEEP=30
+echo "Sleep $SLEEP Seconds to sync Ring"
+sleep $SLEEP
+kill_nodes
+remove_addr
+check_output

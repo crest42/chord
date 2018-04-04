@@ -12,6 +12,7 @@
 #define DEBUG(...) printf(__VA_ARGS__)
 #else
 #define DEBUG(...) {}
+#define NDEBUG
 #endif
 
 typedef uint16_t nodeid_t;
@@ -26,7 +27,7 @@ typedef uint16_t nodeid_t;
 #endif
 
 #ifndef CHORD_RING_BITS
-#define CHORD_RING_BITS (4)
+#define CHORD_RING_BITS (8)
 #endif
 
 #ifndef FINGERTABLE_SIZE
@@ -108,5 +109,6 @@ void *thread_wait_for_msg(void *n);
 void *thread_periodic(void *n);
 int notify(struct node *target);
 nodeid_t join(struct node *src, struct node *target);
+void debug_print_node(struct node *node,bool verbose);
 
 #endif
