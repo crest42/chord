@@ -15,7 +15,7 @@ lib: chord.o
 example.o: example.c
 	$(CC) -c example.c $(CCFLAGS) $(WFLAGS)
 
-chord.o: chord.c
+chord.o: chord.c chord.h
 	$(CC) -c chord.c $(CCFLAGS) $(WFLAGS)
 
 clean:
