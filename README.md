@@ -15,11 +15,14 @@ TODO:
 
 BUILD:
 
+``` make
 With example: make all
 Lib only make lib
 Tests: make test
+```
 
 USAGE:
+
 ``` bash
 ./example master <bind addr>
 ./example slave <bind addr> <master addr>
