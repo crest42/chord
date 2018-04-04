@@ -8,7 +8,7 @@ This is just another implementation of the protocol described in the following p
 
 This Version is far from perfect and there is a lot of work to do. Its not exactly implemented as described in the papers and thus can not guarantee a runtime of O(log n) operations to (re-)build the network
 
-##TODO:
+## TODO:
 
 - get rid of memory leaks
 - cleanup
@@ -17,7 +17,7 @@ This Version is far from perfect and there is a lot of work to do. Its not exact
 - Node Reuse? ABA problem! Locking!
 - static buffer for network msg should be possible
 
-##BUILD:
+## BUILD:
 
 ``` make
 With example: make all
@@ -25,14 +25,14 @@ Lib only: make lib
 Tests: make test
 ```
 
-##USAGE:
+## USAGE:
 
 ``` bash
 ./example master <bind addr>
 ./example slave <bind addr> <master addr>
 ```
 
-TEST:
+## TEST:
 
 Launch testsuite which spawn n nodes and check if ring is valid based on the output of example. Nodes have ~30Seconds to establish ring and then gets killed by the bash script.
 
