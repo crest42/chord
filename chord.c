@@ -459,8 +459,8 @@ static int generic_wait(struct node *node,unsigned char *retbuf,size_t bufsize) 
                 memcpy(retbuf, content, bufsize);
             }
         }
-        char *addr = malloc(INET6_ADDRSTRLEN);
-        inet_ntop(AF_INET6,&(addr_in6->sin6_addr),addr,INET6_ADDRSTRLEN);
+        char addr[INET6_ADDRSTRLEN];
+        inet_ntop(AF_INET6, &(addr_in6->sin6_addr), addr, INET6_ADDRSTRLEN);
         switch (type)
         {
         case MSG_TYPE_FIND_SUCCESSOR:
@@ -469,8 +469,7 @@ static int generic_wait(struct node *node,unsigned char *retbuf,size_t bufsize) 
                 memcpy(&req_id, (nodeid_t *)content, sizeof(req_id));
                 DEBUG("req_id is %d my_id is %d from %d\n", req_id, mynode.id,src_id);
                 if(mynode.predecessor && in_interval(mynode.predecessor,&mynode,req_id)) {
-                    //struct node *node = create_node(addr);
-                    //mynode.predecessor = node;
+
                     char *msg = craft_message(MSG_TYPE_FIND_SUCCESSOR_RESP, src_id, sizeof(struct node), (char *)&mynode);
                     int ret = chord_send_nonblock_sock(sock, msg, CHORD_HEADER_SIZE + CHORD_FIND_SUCCESSOR_RESP_SIZE);
                     free_message(msg);
@@ -563,7 +562,6 @@ static int generic_wait(struct node *node,unsigned char *retbuf,size_t bufsize) 
             default:
                 break;
             }
-            free(addr);
     }
     return CHORD_ERR;
 }
