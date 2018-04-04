@@ -42,8 +42,8 @@ static int chord_send_nonblock_sock(int sock, char *msg, size_t size) {
 static void debug_print_fingertable() {
     printf("fingetable of %d:\n",mynode.id);
         for (int i = 0; i < FINGERTABLE_SIZE;i++) {
-            if(fingertable[i].node) {
-                printf("%d-%d: node(%d)\n", fingertable[i].start, (fingertable[i].start + fingertable[i].interval) % CHORD_RING_SIZE,fingertable[i].node->id);
+            if(!node_is_null(&fingertable[i].node)) {
+                printf("%d-%d: node(%d)\n", fingertable[i].start, (fingertable[i].start + fingertable[i].interval) % CHORD_RING_SIZE,fingertable[i].node.id);
             } else {
                 printf("%d-%d: node(nil)\n", fingertable[i].start, (fingertable[i].start + fingertable[i].interval) % CHORD_RING_SIZE);
             }
@@ -263,7 +263,7 @@ static int chord_send_block_and_wait(struct node *target, char *msg, size_t size
 
 static struct node *find_successor_in_fingertable(nodeid_t nodeid) {
     for (int i = 0; i < FINGERTABLE_SIZE;i++) {
-        if(fingertable[i].node && nodeid < fingertable[i].node->id) {
+        if(!node_is_null(&fingertable[i].node) && nodeid < fingertable[i].node.id) {
             //return fingertable[i].node;
         }
     }
@@ -618,7 +618,7 @@ static int init_fingertable(nodeid_t id) {
         interval -= start;
         fingertable[i].start = start;
         fingertable[i].interval = interval;
-        fingertable[i].node = NULL;
+        memset(&fingertable[i].node, 0, sizeof(fingertable[i].node));
     }
     return CHORD_OK;
 }
@@ -709,13 +709,23 @@ static void fix_fingers(struct node *node) {
     }
     nodeid_t i = rand() % CHORD_RING_BITS;
         if(node->successor && (node->id != node->successor->id)) {
-            fingertable[i].node = find_successor(node->successor, fingertable[i].start);
-            struct node *save = fingertable[i].node;
-            if (fingertable[i].node)
+            struct node *tmp = find_successor(node->successor, fingertable[i].start);
+            if(tmp) {
+              copy_node_static(tmp, &fingertable[i].node);
+            } else {
+              memset(&fingertable[i].node, 0, sizeof(fingertable[i].node));
+            }
+            free(tmp);
+            struct node *save = &fingertable[i].node;
+            if (!node_is_null(&fingertable[i].node))
             {
-                while (i + 1 <= FINGERTABLE_SIZE && fingertable[i].node->id >= fingertable[i + 1].start)
+                while (i + 1 <= FINGERTABLE_SIZE && fingertable[i].node.id >= fingertable[i + 1].start)
                 {
-                    copy_node(save,&fingertable[i + 1].node);
+                    if(save) {
+                      copy_node_static(save,&fingertable[i + 1].node);
+                    } else {
+                        memset(&fingertable[i].node, 0, sizeof(fingertable[i].node));
+                    }
                     i++;
                 }
             }
@@ -776,9 +786,8 @@ void *thread_periodic(void *n){
         {
             DEBUG("ERROR PRE Do not respond to ping\n");
             for (int i = 0; i < FINGERTABLE_SIZE;i++) {
-                if(fingertable[i].node && fingertable[i].node->id == mynode.predecessor->id) {
-                    free(fingertable[i].node);
-                    fingertable[i].node = NULL;
+                if(!node_is_null(&fingertable[i].node) && fingertable[i].node.id == mynode.predecessor->id) {
+                    memset(&fingertable[i].node, 0, sizeof(fingertable[i].node));
                 }
             }
             mynode.predecessor = &successorlist[0];
@@ -787,9 +796,8 @@ void *thread_periodic(void *n){
         {
             DEBUG("ERROR SUC Do not respond to ping\n");
             for (int i = 0; i < FINGERTABLE_SIZE;i++) {
-                if(fingertable[i].node && fingertable[i].node->id == mynode.successor->id) {
-                    free(fingertable[i].node);
-                    fingertable[i].node = NULL;
+                if(!node_is_null(&fingertable[i].node) && fingertable[i].node.id == mynode.successor->id) {
+                    memset(&fingertable[i].node, 0, sizeof(fingertable[i].node));
                 }
             }
             mynode.successor = &successorlist[0];

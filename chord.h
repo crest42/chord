@@ -7,7 +7,7 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <stddef.h>
-#define DEBUG_ENABLE
+//#define DEBUG_ENABLE
 #ifdef DEBUG_ENABLE
 #define DEBUG(...) printf(__VA_ARGS__)
 #else
@@ -87,7 +87,7 @@ struct node
 struct fingertable_entry {
     nodeid_t start;
     nodeid_t interval;
-    struct node *node;
+    struct node node;
 };
 struct key
 {
