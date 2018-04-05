@@ -91,6 +91,7 @@ for i in $(seq 0 $NODES); do
    ./example slave ${ADDR[$i]} ${ADDR[0]} > ${NODEOUT[$i]} &
   fi
   NODEPID[$i]=$!
+  sleep 2
 done
 trap "kill_helper" INT
 
