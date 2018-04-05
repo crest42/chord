@@ -30,7 +30,7 @@ int main(int argc, char *argv[]) {
     memset(nodeip, 0, INET6_ADDRSTRLEN);
     char masterip[INET6_ADDRSTRLEN];
     memset(masterip, 0, INET6_ADDRSTRLEN);
-    bool master = false, slave = false;
+    //bool master = false, slave = false;
     struct node *partner = NULL;
 
     if(!argv[1] || !(strcmp(argv[1],"master") == 0 || strcmp(argv[1],"slave") == 0) || !argv[2] || !inet_pton(AF_INET6, argv[2], buf)) {
