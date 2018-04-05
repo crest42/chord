@@ -60,6 +60,7 @@ typedef uint16_t nodeid_t;
 #define MAX_MSG_SIZE 256
     enum msg_type
     {
+        MSG_TYPE_NULL = 0,
         MSG_TYPE_FIND_SUCCESSOR = 1,
         MSG_TYPE_FIND_SUCCESSOR_RESP = 2,
         MSG_TYPE_FIND_SUCCESSOR_RESP_NEXT = 3,
@@ -96,9 +97,11 @@ struct key
     struct node *predecessor;
 };
 struct node mynode;
+struct node predecessor;
+
 struct fingertable_entry fingertable[FINGERTABLE_SIZE];
 struct node successorlist[FINGERTABLE_SIZE];
-struct node *find_successor(struct node *node, nodeid_t id);
+int find_successor(struct node *node, struct node *ret, nodeid_t id);
 
 int hash(unsigned char *out, const char *in,size_t in_size,size_t out_size);
 int init_chord(const char *node_addr, size_t addr_size);

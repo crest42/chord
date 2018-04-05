@@ -61,7 +61,6 @@ TAIL=$(which tail)
 if [[ -z $NODES ]]; then
   NODES=3
 fi
-NODES=$(($NODES-1))
 if [[ ! $TAIL ]]; then
   echo "No tail command found"
   exit 1
@@ -74,6 +73,8 @@ if [[ ! $LO ]]; then
 fi
 echo "Loopback is $LO"
 echo "Set up Addresses for $NODES hosts"
+NODES=$(($NODES-1))
+
 STARTADDR=2
 for i in $(seq 0 $NODES); do
   HEX=$(printf "%04X\n" $STARTADDR)
