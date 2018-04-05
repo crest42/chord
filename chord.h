@@ -77,7 +77,6 @@ typedef uint16_t nodeid_t;
 typedef enum msg_type chord_msg_t;
 struct node
 {
-    unsigned char hash_id[HASH_DIGEST_SIZE];
     nodeid_t id;
     int socket;
     struct sockaddr_in6 addr;

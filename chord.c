@@ -284,31 +284,38 @@ static struct node *find_successor_in_fingertable(nodeid_t nodeid) {
 
 int find_successor(struct node *target,struct node *ret, nodeid_t id) {
     struct node *final = NULL;
+    struct node *tmp = NULL;
     int i = 0;
     while (i == 2 || final == NULL)
     {
         char *msg = craft_message(MSG_TYPE_FIND_SUCCESSOR, target->id, CHORD_FIND_SUCCESSOR_SIZE, (char *)&id);
         if(!msg) {
+            free(tmp);
             return CHORD_ERR;
         }
         chord_msg_t type = chord_send_block_and_wait(target, msg, CHORD_HEADER_SIZE + CHORD_FIND_SUCCESSOR_SIZE, MSG_TYPE_FIND_SUCCESSOR_RESP, (char *)ret, sizeof(struct node));
         free_message(msg);
         if (type == MSG_TYPE_FIND_SUCCESSOR_RESP_NEXT)
         {
-            char *addr = malloc(INET6_ADDRSTRLEN);
+            char addr[INET6_ADDRSTRLEN];
             inet_ntop(AF_INET6,&(ret->addr.sin6_addr),addr,INET6_ADDRSTRLEN);
-            target = create_node(addr);
-            DEBUG("ask next node %d\n",ret->id);
+            if(tmp) {
+                free(tmp);
+            }
+            tmp = create_node(addr);
+            target = tmp;
+            DEBUG("ask next node %d\n", ret->id);
         }
         else if (type == MSG_TYPE_FIND_SUCCESSOR_RESP)
         {
             final = ret;
             break;
         } else if (type == CHORD_ERR) {
+            free(tmp);
             return CHORD_ERR;
         }
     }
-
+    free(tmp);
     nodeid_t ret_id = ret->id;
     if(ret_id == 0) {
         memset(ret, 0, sizeof(struct node));
@@ -551,17 +558,15 @@ static int generic_wait(struct node *node,unsigned char *retbuf,size_t bufsize) 
             }
             case MSG_TYPE_NOTIFY:
             {
-                struct node *n = malloc(sizeof(struct node));
-                memcpy(n, content, sizeof(struct node));
-                if(is_pre(n->id)) {
+                struct node n;
+                memcpy(&n, content, sizeof(struct node));
+                if(is_pre(n.id)) {
                     if(!node_is_null(mynode.predecessor)) {
-                        DEBUG("update pre old %d new %d\n",mynode.predecessor->id,n->id);
+                        DEBUG("update pre old %d new %d\n",mynode.predecessor->id,n.id);
                     } else {
-                        DEBUG("update pre old nil new %d\n",n->id);
+                        DEBUG("update pre old nil new %d\n",n.id);
                     }
-                    memcpy(mynode.predecessor, n,sizeof(struct node));
-                } else {
-                    free(n);
+                    memcpy(mynode.predecessor, &n,sizeof(struct node));
                 }
                 break;
 
@@ -635,9 +640,9 @@ int init_chord(const char *node_addr,size_t addr_size){
     memset(&mynode, 0, sizeof(mynode));
     memset(&predecessor, 0, sizeof(predecessor));
     memset(successorlist, 0, sizeof(successorlist));
-
-    hash(mynode.hash_id, node_addr, addr_size, HASH_DIGEST_SIZE);
-    mynode.id = get_mod_of_hash(mynode.hash_id,CHORD_RING_SIZE);
+    unsigned char hash_id[HASH_DIGEST_SIZE];
+    hash(hash_id, node_addr, addr_size, HASH_DIGEST_SIZE);
+    mynode.id = get_mod_of_hash(hash_id,CHORD_RING_SIZE);
     mynode.predecessor = &predecessor;
     DEBUG(">>>>>>>>>>>>>>>>>>>>>>>>>>>><Update successorlist to %d\n",successorlist[0].id);
     mynode.successor = &successorlist[0];
@@ -659,6 +664,7 @@ struct node *create_node(char *address) {
     node->socket = socket(AF_INET6, SOCK_STREAM, 0);
     if(node->socket < 0) {
         perror("Error while creating socket");
+        free(node);
         return NULL;
     }
     node->addr.sin6_family = AF_INET6;
@@ -677,14 +683,16 @@ struct node *create_node(char *address) {
         {
             DEBUG("Unknown error in inet_pton\n");
         }
+        free(node);
         return NULL;
     }
     struct sockaddr_in6 src;
     memcpy(&src, &(mynode.addr), sizeof(src));
     src.sin6_port = 0;
     bind(node->socket, (struct sockaddr *)&src,sizeof(struct sockaddr_in6));
-    hash(node->hash_id,address,sizeof(address),sizeof(node->hash_id));
-    node->id = get_mod_of_hash(node->hash_id,CHORD_RING_SIZE);
+    unsigned char hash_id[HASH_DIGEST_SIZE];
+    hash(hash_id,address,sizeof(address),sizeof(hash_id));
+    node->id = get_mod_of_hash(hash_id,CHORD_RING_SIZE);
 
     return node;
 }
@@ -772,8 +780,8 @@ void *thread_periodic(void *n){
     struct node *node = (struct node *)n;
     while (1)
     {
-        i++;
         DEBUG("%d: sockid: %d periodic run %d\n",node->id,node->socket,i);
+        i++;
         if(!node->successor && node_is_null(node->predecessor)) {
             DEBUG(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>Update successor to %d\n",mynode.id);
             node->successor = &mynode;
