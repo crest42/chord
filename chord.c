@@ -1,4 +1,5 @@
 #include "chord.h"
+#include "chord_internal.h"
 #include <errno.h>
 #include <unistd.h>
 #include <assert.h>
@@ -226,19 +227,6 @@ static int chord_send_block_and_wait(struct node *target, unsigned char *msg, si
     chord_msg_t type = 0;
     while (true)
     {
-        //REALLY ugly timeout solution. target sys supports afaik no timeout...
-        for (int i = 0; i < 3;i++) {
-            ret = recv(s, read_buf, MAX_MSG_SIZE, MSG_PEEK | MSG_DONTWAIT);
-            if(ret == -1 ) {
-                usleep(500);
-            } else {
-                break;
-            }
-        }
-       if(ret == -1) {
-            close(s);
-           return CHORD_ERR;
-       }
        ret = recv(s, read_buf, MAX_MSG_SIZE, 0);
        if (ret < CHORD_HEADER_SIZE)
        {

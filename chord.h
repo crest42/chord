@@ -95,11 +95,6 @@ struct key
     struct node *successor;
     struct node *predecessor;
 };
-struct node mynode;
-struct node predecessor;
-
-struct fingertable_entry fingertable[FINGERTABLE_SIZE];
-struct node successorlist[FINGERTABLE_SIZE];
 int find_successor(struct node *node, struct node *ret, nodeid_t id);
 
 int hash(unsigned char *out, const char *in,size_t in_size,size_t out_size);
