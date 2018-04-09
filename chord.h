@@ -106,7 +106,7 @@ int hash(unsigned char *out, const char *in,size_t in_size,size_t out_size);
 int init_chord(const char *node_addr, size_t addr_size);
 int add_node(struct node *node);
 struct node *create_node(char *address);
-struct node *get_own_node();
+struct node *get_own_node(void);
 void *thread_wait_for_msg(void *n);
 void *thread_periodic(void *n);
 int notify(struct node *target);
