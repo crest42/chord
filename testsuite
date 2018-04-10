@@ -74,6 +74,7 @@ fi
 echo "Loopback is $LO"
 echo "Set up Addresses for $NODES hosts"
 NODES=$(($NODES-1))
+SLEEP=10
 
 STARTADDR=2
 for i in $(seq 0 $NODES); do
@@ -84,20 +85,21 @@ for i in $(seq 0 $NODES); do
   echo "Added Addr $i: ${ADDR[$i]}"
   NODEOUT[$i]=$(mktemp)
   if [[ $i -eq 0 ]]; then
-    echo "Start master with ${ARGV[$i]}"
+    echo "Start master with ${ADDR[$i]}"
     ./example master ${ADDR[$i]} > ${NODEOUT[$i]} &
   else
     echo "Start slave ${ADDR[$i]} with master ${ADDR[0]}"
    ./example slave ${ADDR[$i]} ${ADDR[0]} > ${NODEOUT[$i]} &
   fi
   NODEPID[$i]=$!
-  sleep 2
+  sleep $SLEEP
 done
 trap "kill_helper" INT
 
-SLEEP=30
 echo "Sleep $SLEEP Seconds to sync Ring"
 sleep $SLEEP
+echo "Kill nodes"
+sleep 1
 kill_nodes
-remove_addr
 check_output
+remove_addr

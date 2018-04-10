@@ -4,15 +4,32 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/types.h>
-#include <sys/socket.h>
 #include <arpa/inet.h>
 #include <stddef.h>
+
+
+enum log_level
+{
+    OFF     = 0x0,
+    FATAL   = 0x1,
+    ERROR   = 0x3,
+    WARN    = 0x7,
+    INFO    = 0xf,
+    DEBUG   = 0x1f,
+    TRACE   = 0x3f,
+    ALL     = 0xff
+};
+
 //#define DEBUG_ENABLE
+#define DEBUG_MAX_FUNC_NAME 20
 #ifdef DEBUG_ENABLE
-#define DEBUG(...) printf(__VA_ARGS__)
+#include <stdarg.h>
+#include <stdio.h>
+#define DEBUG_LEVEL INFO
+#define DEBUG(level, ...) debug_printf(__FUNCTION__,level, __VA_ARGS__)
 #else
 #define DEBUG(...) {}
-#define NDEBUG
+#define DEBUG_LEVEL OFF
 #endif
 
 typedef uint16_t nodeid_t;
@@ -34,13 +51,19 @@ typedef uint16_t nodeid_t;
 #define FINGERTABLE_SIZE CHORD_RING_BITS
 #endif
 
+#ifdef RIOT
+#define _getpid() thread_getpid()
+#else
+#define _getpid() getpid()
+#endif
+
 #ifndef CHORD_PORT
 #define CHORD_PORT (6667)
 #endif
 #define CHORD_ERR (-1)
 #define  CHORD_OK (0)
 #define CHORD_BACKLOG_SIZE (10)
-#define CHORD_PERIODIC_SLEEP (1)
+#define CHORD_PERIODIC_SLEEP (5)
 #define CHORD_MSG_COMMAND_SLOT (0)
 #define CHORD_MSG_COMMAND_SIZE (sizeof(chord_msg_t))
 #define CHORD_MSG_SRC_ID_SIZE (sizeof(nodeid_t))
@@ -57,31 +80,34 @@ typedef uint16_t nodeid_t;
 #define CHORD_FIND_SUCCESSOR_SIZE (sizeof(nodeid_t))
 #define CHORD_PING_SIZE (sizeof(nodeid_t))
 #define CHORD_FIND_SUCCESSOR_RESP_SIZE (sizeof(struct node))
-#define MAX_MSG_SIZE 256
+#define MAX_MSG_SIZE 512
     enum msg_type
     {
-        MSG_TYPE_NULL = 0,
-        MSG_TYPE_FIND_SUCCESSOR = 1,
-        MSG_TYPE_FIND_SUCCESSOR_RESP = 2,
-        MSG_TYPE_FIND_SUCCESSOR_RESP_NEXT = 3,
-        MSG_TYPE_GET_PREDECESSOR = 4,
-        MSG_TYPE_GET_PREDECESSOR_RESP = 5,
-        MSG_TYPE_GET_PREDECESSOR_RESP_NULL = 6,
-        MSG_TYPE_GET_SUCCESSOR = 7,
-        MSG_TYPE_GET_SUCCESSOR_RESP = 8,
-        MSG_TYPE_PING = 9,
-        MSG_TYPE_PONG = 10,
-        MSG_TYPE_NOTIFY = 11,
-        MSG_TYPE_NO_WAIT = 12
+        MSG_TYPE_NULL                       = 0,
+        MSG_TYPE_FIND_SUCCESSOR             = 1,
+        MSG_TYPE_FIND_SUCCESSOR_RESP        = 2,
+        MSG_TYPE_FIND_SUCCESSOR_RESP_NEXT   = 3,
+        MSG_TYPE_GET_PREDECESSOR            = 4,
+        MSG_TYPE_GET_PREDECESSOR_RESP       = 5,
+        MSG_TYPE_GET_PREDECESSOR_RESP_NULL  = 6,
+        MSG_TYPE_GET_SUCCESSOR              = 7,
+        MSG_TYPE_GET_SUCCESSOR_RESP         = 8,
+        MSG_TYPE_PING                       = 9,
+        MSG_TYPE_PONG                       = 10,
+        MSG_TYPE_NOTIFY                     = 11,
+        MSG_TYPE_NO_WAIT                    = 12,
+        MSG_TYPE_COPY_SUCCESSORLIST         = 13,
+        MSG_TYPE_COPY_SUCCESSORLIST_RESP    = 14
     };
-typedef enum msg_type chord_msg_t;
-struct node
-{
-    nodeid_t id;
-    int socket;
-    struct sockaddr_in6 addr;
-    struct node *successor;
-    struct node *predecessor;
+
+    typedef enum msg_type chord_msg_t;
+    struct node
+    {
+        nodeid_t id;
+        int socket;
+        struct sockaddr_in6 addr;
+        struct node *successor;
+        struct node *predecessor;
 };
 
 struct fingertable_entry {
@@ -95,6 +121,7 @@ struct key
     struct node *successor;
     struct node *predecessor;
 };
+
 int find_successor(struct node *node, struct node *ret, nodeid_t id);
 
 int hash(unsigned char *out, const char *in,size_t in_size,size_t out_size);
@@ -107,5 +134,5 @@ void *thread_periodic(void *n);
 int notify(struct node *target);
 nodeid_t join(struct node *src, struct node *target);
 void debug_print_node(struct node *node,bool verbose);
-
+bool node_is_null(struct node *node);
 #endif
