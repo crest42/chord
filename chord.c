@@ -194,6 +194,7 @@ static int bind_socket(const char *node_addr,struct node *node) {
         }
         return CHORD_ERR;
     }
+    DEBUG(INFO,"bind %d\n",CHORD_PORT+node->id );
     if ((bind(node->socket, (struct sockaddr *)&node->addr, sizeof(node->addr))) == -1)
     {
         perror("Error on bind");
@@ -283,13 +284,15 @@ static int chord_send_block_and_wait(struct node *target, unsigned char *msg, si
     DEBUG(DEBUG, "chord_send_block_and_wait new sock: %d\n", s);
     struct sockaddr_in6 tmpaddr, src_tmpaddr;
     memcpy(&tmpaddr, &target->addr, sizeof(struct sockaddr_in6));
+    assert(tmpaddr.sin6_port == htons(CHORD_PORT+target->id));
     memcpy(&src_tmpaddr, &mynode.addr, sizeof(struct sockaddr_in6));
-    src_tmpaddr.sin6_port += 1;
-    errno = 0;
+    src_tmpaddr.sin6_port = htons(ntohs(src_tmpaddr.sin6_port)+1);
+    DEBUG(INFO, "bind to %d\n", ntohs(src_tmpaddr.sin6_port));
     if(bind(s, (struct sockaddr *)&src_tmpaddr, sizeof(struct sockaddr_in6)) == -1) {
         perror("bind");
         return CHORD_ERR;
     }
+    DEBUG(INFO,"connect to port %d (id %d)\n",ntohs(tmpaddr.sin6_port),target->id);
     if (connect(s, (struct sockaddr *)&tmpaddr, sizeof(struct sockaddr_in6)) == -1)
     {
         close(s);
@@ -379,8 +382,9 @@ int find_successor(struct node *target,struct node *ret, nodeid_t id) {
                 free(tmp);
             }
             tmp = create_node(addr);
+            assert(tmp->id == ret->id);
             target = tmp;
-            DEBUG(INFO,"ask next node %d\n", ret->id);
+            DEBUG(INFO,"ask next node %d\n", target->id);
         }
         else if (type == MSG_TYPE_FIND_SUCCESSOR_RESP)
         {

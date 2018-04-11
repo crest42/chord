@@ -74,11 +74,11 @@ fi
 echo "Loopback is $LO"
 echo "Set up Addresses for $NODES hosts"
 NODES=$(($NODES-1))
-SLEEP=10
+SLEEP=20
 
 STARTADDR=2
 for i in $(seq 0 $NODES); do
-  HEX=$(printf "%04X\n" $STARTADDR)
+  HEX=$(printf "%0X\n" $STARTADDR)
   STARTADDR=$(($STARTADDR+1))
   ADDR[$i]="::${HEX}"
   ifconfig $LO inet6 add ${ADDR[$i]}

@@ -12,12 +12,9 @@ This Version is far from perfect and there is a lot of work to do. Its not exact
 
 TODO:
 
-- get rid of memory leaks
 - cleanup
-- use static buffer instead of malloc
-- static node buffer should be possible since we always need fingertable+successorlist+mynode+precessor nodes e. g. (2*m*60 ~Bytes) + 2*~60 Bytes
-- Node Reuse? ABA problem! Locking!
 - static buffer for network msg should be possible
+- make address hash of byte format not human readable...
 
 BUILD:
 
