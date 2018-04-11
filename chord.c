@@ -127,22 +127,23 @@ static void debug_print_fingertable(void) {
         }
 }
 static void debug_print_successorlist(void) {
-        printf("successorlist of %d:\n",mynode.id);
-        int myid = -1;
-        for (int i = 0; i < FINGERTABLE_SIZE; i++)
+    printf("successorlist of %d:\n",mynode.id);
+    int myid = -1;
+    if (!node_is_null(mynode.successor))
+    {
+        myid = mynode.successor->id;
+    }
+    for (int i = 0; i < FINGERTABLE_SIZE; i++)
+    {
+        if (!node_is_null(&successorlist[i]))
         {
-            if (!node_is_null(mynode.successor))
-            {
-                myid = ((mynode.successor->id + (i)) % CHORD_RING_SIZE);
-            }
-            if (!node_is_null(&successorlist[i]))
-            {
-                printf("successor %d (>%d) is: %d\n", i, myid, successorlist[i].id);
-            }
-            else
-            {
-                printf("successor %d (>%d) is: null\n", i,myid);
-            }
+            printf("successor %d (>%d) is: %d\n", i, myid, successorlist[i].id);
+        }
+        else
+        {
+            printf("successor %d (>%d) is: null\n", i,myid);
+        }
+        myid = successorlist[i].id;
     }
 }
 
@@ -353,9 +354,9 @@ static int chord_send_block_and_wait(struct node *target, unsigned char *msg, si
 }
 
 static struct node *find_successor_in_fingertable(nodeid_t nodeid) {
-    for (int i = 0; i < FINGERTABLE_SIZE;i++) {
+    for (int i = FINGERTABLE_SIZE-1; i >= 0;i--) {
         if(!node_is_null(&fingertable[i].node) && nodeid < fingertable[i].node.id) {
-            //return fingertable[i].node;
+           // return &fingertable[i].node;
         }
     }
     return NULL;
@@ -364,8 +365,7 @@ static struct node *find_successor_in_fingertable(nodeid_t nodeid) {
 int find_successor(struct node *target,struct node *ret, nodeid_t id) {
     struct node *final = NULL;
     struct node *tmp = NULL;
-    int i = 0;
-    while (i == 2 || final == NULL)
+    while (final == NULL)
     {
         unsigned char *msg = craft_message(MSG_TYPE_FIND_SUCCESSOR, target->id, CHORD_FIND_SUCCESSOR_SIZE, (char *)&id);
         if(!msg) {
@@ -495,7 +495,7 @@ static int get_predecessor(struct node *src,struct node *pre) {
 }
 
 static bool in_interval(struct node *first, struct node *second, nodeid_t id) {
-    DEBUG(INFO,"check if in %d <-> %d (%d)\n",first->id,second->id,id);
+    //DEBUG(INFO,"check if in %d <-> %d (%d)\n",first->id,second->id,id);
     if (first->id < second->id && id > first->id && id <= second->id)
     {
         return true;
@@ -655,7 +655,6 @@ static int generic_wait(struct node *node,unsigned char *retbuf,size_t bufsize) 
                     }
                     copy_node(&n, mynode.predecessor);
                     assert(mynode.predecessor && n.id == mynode.predecessor->id);
-                    debug_print_node(&mynode, false);
                 }
                 break;
 
@@ -951,7 +950,7 @@ void *thread_periodic(void *n){
         }
         DEBUG(INFO,"Fix fingers\n");
         fix_fingers(&mynode);
-        debug_print_node(&mynode,false);
+        debug_print_node(&mynode,true);
         sleep(CHORD_PERIODIC_SLEEP);
     }
     return NULL;
