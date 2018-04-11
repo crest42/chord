@@ -276,6 +276,7 @@ static int chord_send_block_and_wait(struct node *target, unsigned char *msg, si
         perror("socket");
         return CHORD_ERR;
     }
+    DEBUG(DEBUG,"New socket %d\n",s);
 
     struct timeval timeout;
     timeout.tv_sec = 30;
@@ -291,6 +292,7 @@ static int chord_send_block_and_wait(struct node *target, unsigned char *msg, si
     DEBUG(INFO, "bind to %d\n", ntohs(src_tmpaddr.sin6_port));
     if(bind(s, (struct sockaddr *)&src_tmpaddr, sizeof(struct sockaddr_in6)) == -1) {
         perror("bind");
+        close(s);
         return CHORD_ERR;
     }
     DEBUG(INFO,"connect to port %d (id %d)\n",ntohs(tmpaddr.sin6_port),target->id);
@@ -307,6 +309,7 @@ static int chord_send_block_and_wait(struct node *target, unsigned char *msg, si
         if (tmp < 0)
         {
             perror("write");
+            close(s);
             return CHORD_ERR;
       }
       ret += tmp;
@@ -322,10 +325,10 @@ static int chord_send_block_and_wait(struct node *target, unsigned char *msg, si
        ret = recv(s, read_buf, MAX_MSG_SIZE, 0);
        if (ret < CHORD_HEADER_SIZE || ret < 0)
        {
-           DEBUG(ERROR,"Error in recv (recieved) %d < (CHORD_HEADER_SIZE) %d: ", ret, (int)CHORD_HEADER_SIZE);
-           perror("");
+            DEBUG(ERROR,"Error in recv (recieved) %d < (CHORD_HEADER_SIZE) %d: ", ret, (int)CHORD_HEADER_SIZE);
+            perror("");
             close(s);
-           return CHORD_ERR;
+            return CHORD_ERR;
         }
 
         memcpy(&type, &read_buf[CHORD_MSG_COMMAND_SLOT], CHORD_MSG_COMMAND_SIZE);
@@ -767,19 +770,7 @@ struct node *create_node(char *address) {
     node->id = get_mod_of_hash(hash_id,CHORD_RING_SIZE);
 
     DEBUG(INFO,"create node with addr %s\n",address);
-    node->socket = socket(AF_INET6, SOCK_DGRAM, 0);
-    if(node->socket < 0) {
-        perror("Error while creating socket");
-        free(node);
-        return NULL;
-    }
-    DEBUG(INFO,"new sock: %d\n",node->socket);
-    struct timeval timeout;      
-    timeout.tv_sec = 30;
-    timeout.tv_usec = 0;
-    if (setsockopt (node->socket, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout,sizeof(timeout)) < 0)
-    perror("setsockopt failed\n");
-    
+
     node->addr.sin6_family = AF_INET6;
     node->addr.sin6_port = htons(CHORD_PORT+node->id);
     int c = inet_pton(AF_INET6, address,&(node->addr.sin6_addr));

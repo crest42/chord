@@ -14,7 +14,8 @@ TODO:
 
 - cleanup
 - static buffer for network msg should be possible
-- make address hash of byte format not human readable...
+- make address hash from addr byte format not from human readable...
+- enable check fingertable && check successorlist for faster lookups
 
 BUILD:
 

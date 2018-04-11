@@ -20,11 +20,15 @@ enum log_level
     ALL     = 0xff
 };
 
-//#define DEBUG_ENABLE
+#define DEBUG_ENABLE
 #define DEBUG_MAX_FUNC_NAME 20
 #ifdef DEBUG_ENABLE
 #include <stdarg.h>
 #include <stdio.h>
+#ifdef RIOT
+#include "thread.h"
+#define __FUNCTION__ ""
+#endif
 #define DEBUG_LEVEL INFO
 #define DEBUG(level, ...) debug_printf(__FUNCTION__,level, __VA_ARGS__)
 #else

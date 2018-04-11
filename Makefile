@@ -21,5 +21,5 @@ chord.o: chord.c chord.h
 clean:
 	rm -rf *.a *.o example
 
-test:
-	./testsuitev
+test: all
+	./testsuite
