@@ -1,6 +1,6 @@
 PHONY = all example lib test
 .DEFAULT_GOAL := all
-WFLAGS := -Wall
+WFLAGS := -Wall -Wextra
 CCFLAGS := 
 all: example
 
@@ -13,7 +13,7 @@ lib: chord.o
 	ar rcs libchord.a chord.o
 
 example.o: example.c
-	$(CC) -c example.c $(CCFLAGS) $(WFLAGS)
+	$(CC) -c example.c -lpthread $(CCFLAGS) $(WFLAGS)
 
 chord.o: chord.c chord.h
 	$(CC) -c chord.c $(CCFLAGS) $(WFLAGS)

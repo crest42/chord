@@ -7,7 +7,6 @@
 #include <arpa/inet.h>
 #include <stddef.h>
 
-
 enum log_level
 {
     OFF     = 0x0,
@@ -20,17 +19,17 @@ enum log_level
     ALL     = 0xff
 };
 
-#define DEBUG_ENABLE
 #define DEBUG_MAX_FUNC_NAME 20
 #ifdef DEBUG_ENABLE
+#include <time.h>
 #include <stdarg.h>
 #include <stdio.h>
-#ifdef RIOT
-#include "thread.h"
+#ifdef RIOT[Starting] Update package ind
+#include "t[Starting] Update package indhread.h"
 #define __FUNCTION__ ""
 #endif
 #define DEBUG_LEVEL INFO
-#define DEBUG(level, ...) debug_printf(__FUNCTION__,level, __VA_ARGS__)
+#define DEBUG(level, ...) debug_printf((unsigned long)time(NULL),__FUNCTION__,level, __VA_ARGS__)
 #else
 #define DEBUG(...) {}
 #define DEBUG_LEVEL OFF
@@ -58,7 +57,9 @@ typedef uint16_t nodeid_t;
 #ifdef RIOT
 #define _getpid() thread_getpid()
 #else
-#define _getpid() getpid()
+#include <sys/types.h>
+#include <sys/syscall.h>
+#define _getpid() (int)syscall(__NR_gettid)
 #endif
 
 #ifndef CHORD_PORT
@@ -83,7 +84,6 @@ typedef uint16_t nodeid_t;
 #define CHORD_GET_SUCCESSOR_RESP_SIZE (sizeof(nodeid_t))
 #define CHORD_FIND_SUCCESSOR_SIZE (sizeof(nodeid_t))
 #define CHORD_PING_SIZE (sizeof(nodeid_t))
-#define CHORD_FIND_SUCCESSOR_RESP_SIZE (sizeof(struct node))
 #define MAX_MSG_SIZE 512
     enum msg_type
     {
@@ -101,7 +101,8 @@ typedef uint16_t nodeid_t;
         MSG_TYPE_NOTIFY                     = 11,
         MSG_TYPE_NO_WAIT                    = 12,
         MSG_TYPE_COPY_SUCCESSORLIST         = 13,
-        MSG_TYPE_COPY_SUCCESSORLIST_RESP    = 14
+        MSG_TYPE_COPY_SUCCESSORLIST_RESP    = 14,
+        MSG_TYPE_CHORD_ERR                  = 15
     };
 
     typedef enum msg_type chord_msg_t;
@@ -129,14 +130,14 @@ struct key
 int find_successor(struct node *node, struct node *ret, nodeid_t id);
 
 int hash(unsigned char *out, const char *in,size_t in_size,size_t out_size);
-int init_chord(const char *node_addr, size_t addr_size);
+int init_chord(const char *node_addr);
 int add_node(struct node *node);
 struct node *create_node(char *address);
 struct node *get_own_node(void);
 void *thread_wait_for_msg(void *n);
 void *thread_periodic(void *n);
 int notify(struct node *target);
-nodeid_t join(struct node *src, struct node *target);
+int join(struct node *src, struct node *target);
 void debug_print_node(struct node *node,bool verbose);
 bool node_is_null(struct node *node);
 #endif

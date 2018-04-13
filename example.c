@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <sched.h>
 #include <pthread.h>
 #include "chord.h"
 #include <signal.h>
@@ -24,7 +25,10 @@ static void print_usage(void) {
     printf("Usage\n\t./example master <bind addr>\n\t./example slave <master addr>\n");
 }
 int main(int argc, char *argv[]) {
-    signal(SIGINT, sig_handler);
+    if(argc < 1) {
+        print_usage();
+        return -1;
+    }
     char buf[INET6_ADDRSTRLEN];
     char nodeip[INET6_ADDRSTRLEN];
     memset(nodeip, 0, INET6_ADDRSTRLEN);
@@ -51,10 +55,11 @@ int main(int argc, char *argv[]) {
       memcpy(masterip, argv[2], INET6_ADDRSTRLEN-1);
     }
 
-    init_chord(nodeip, strlen(nodeip));
+    if(init_chord(nodeip) == CHORD_ERR) {
+        return -1;
+    }
     struct node *mynode = get_own_node();
-    printf("nodekey for %s is: %d\nhash: ", nodeip,mynode->id);
-    printf("\n");
+    printf("nodekey for %s is: %d\n", nodeip,mynode->id);
 
     if(strcmp(nodeip,masterip) == 0) {
         printf("Create new ring\n");
@@ -68,8 +73,10 @@ int main(int argc, char *argv[]) {
     }
     printf("create eventloop thread\n");
     pthread_create(&mythread1, NULL, thread_wait_for_msg, (void *)mynode);
+    printf("create periodic thread\n");
     pthread_create(&mythread2, NULL, thread_periodic, (void *)mynode);
 
+    signal(SIGINT, sig_handler);
     while(!sigint) {
         sleep(1);
     }
