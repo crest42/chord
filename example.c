@@ -89,7 +89,8 @@ int main(int argc, char *argv[]) {
     if(pthread_cancel(mythread2) != 0) {
         printf("Error cancle thread 2s\n");
     }
-    debug_print_node(mynode,false);
+    printf("FINAL: ");
+    debug_print_node(mynode, false);
     fflush(stdout);
     pthread_join(mythread1,NULL);
     pthread_join(mythread2,NULL);

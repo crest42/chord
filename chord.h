@@ -64,7 +64,7 @@ typedef uint16_t nodeid_t;
 #define CHORD_PORT (6667)
 #define CHORD_OK (0)
 #define CHORD_ERR (-1)
-#define CHORD_PERIODIC_SLEEP (5)
+#define CHORD_PERIODIC_SLEEP (2)
 #define CHORD_RING_SIZE (1<<CHORD_RING_BITS)
 
 
@@ -156,48 +156,4 @@ void debug_print_node(struct node *node,bool verbose);
 */
 bool node_is_null(struct node *node);
 
-static int mod(int a, int b){
-  return ((a % b) + b) % b;
-}
-
-static bool in_interval_id(int start, int end, int test) {
-    return (mod((test - start),CHORD_RING_SIZE) <= mod((end - start), CHORD_RING_SIZE));
-}
-
-static char *msg_to_string(chord_msg_t msg) {
-    switch(msg) {
-        case MSG_TYPE_NULL:
-            return "MSG_TYPE_NULL";
-        case MSG_TYPE_GET_PREDECESSOR:
-            return "MSG_TYPE_GET_PREDECESSOR";
-        case MSG_TYPE_GET_PREDECESSOR_RESP:
-            return "MSG_TYPE_GET_PREDECESSOR_RESP";
-        case MSG_TYPE_GET_PREDECESSOR_RESP_NULL:
-            return "MSG_TYPE_GET_PREDECESSOR_RESP_NULL";
-        case MSG_TYPE_FIND_SUCCESSOR:
-            return "MSG_TYPE_FIND_SUCCESSOR";
-        case MSG_TYPE_FIND_SUCCESSOR_RESP:
-            return "MSG_TYPE_FIND_SUCCESSOR_RESP";
-        case MSG_TYPE_FIND_SUCCESSOR_RESP_NEXT:
-            return "MSG_TYPE_FIND_SUCCESSOR_RESP_NEXT";
-        case MSG_TYPE_GET_SUCCESSOR:
-            return "MSG_TYPE_GET_SUCCESSOR";
-        case MSG_TYPE_GET_SUCCESSOR_RESP:
-            return "MSG_TYPE_GET_SUCCESSOR_RESP";
-        case MSG_TYPE_PING:
-            return "MSG_TYPE_PING";
-        case MSG_TYPE_PONG:
-            return "MSG_TYPE_PONG";
-        case MSG_TYPE_NO_WAIT:
-            return "MSG_TYPE_NO_WAIT";
-        case MSG_TYPE_NOTIFY:
-            return "MSG_TYPE_NOTIFY";
-        case MSG_TYPE_COPY_SUCCESSORLIST:
-            return "MSG_TYPE_COPY_SUCCESSORLIST";
-        case MSG_TYPE_COPY_SUCCESSORLIST_RESP:
-            return "MSG_TYPE_COPY_SUCCESSORLIST_RESP";
-        default:
-            return "UNKNOWN";
-        }
-}
 #endif
