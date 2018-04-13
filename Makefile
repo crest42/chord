@@ -1,7 +1,6 @@
 PHONY = all example lib test
 .DEFAULT_GOAL := all
 WFLAGS := -Wall -Wextra
-CCFLAGS := 
 all: example
 
 example: lib example.o

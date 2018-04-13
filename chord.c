@@ -48,101 +48,6 @@ static void debug_printf(unsigned long t,const char *fname,enum log_level level,
 }
 #endif
 
-static int is_finger(struct node *n,struct fingertable_entry *entry) {
-    if(!n || !entry) {
-        return false;
-    }
-    if(entry->node.id > ((entry->start+entry->interval)%CHORD_RING_SIZE)) {
-        if(n->id > (entry->start+entry->interval) && n->id < entry->node.id) {
-            return true;
-        }
-    } else if(entry->node.id < ((entry->start+entry->interval)%CHORD_RING_SIZE)){
-        if(n->id < (entry->start+entry->interval) && n->id > entry->node.id) {
-            return true;
-        }
-    }
-    return false;
-}
-
-static struct node *get_next_successor(void) {
-    for (int i = 0; i < FINGERTABLE_SIZE; i++)
-    {
-                if(successorlist[i].id > mynode.successor->id) {
-                    return &successorlist[i];
-                }
-    }
-    return &mynode;
-}
-
-static int mod(int a, int b){
-  return ((a % b) + b) % b;
-}
-
-static bool in_interval_id(int start, int end, int test) {
-    return (mod((test - start),CHORD_RING_SIZE) <= mod((end - start), CHORD_RING_SIZE));
-}
-
-static bool in_interval(struct node *first, struct node *second, nodeid_t id) {
-    if(!first || !second) {
-        return false;
-    }
-    if(first->id == second->id) {
-        return true;
-    }
-    if(in_interval_id(first->id, second->id, id)) {
-        DEBUG(DEBUG, "%d in [%d,%d)\n",id, first->id,second->id);
-        return true;
-    }
-    else
-    {
-        DEBUG(DEBUG, "%d not in [%d,%d)\n",id, first->id,second->id);
-        return false;
-    }
-}
-
-bool node_is_null(struct node *node) {
-    if(!node) {
-        return false;
-    }
-    if (node->id == 0 && !node->successor && !node->predecessor)
-    {
-        return true;
-    }
-    return false;
-}
-
-bool node_cmp(struct node *first, struct node *second) {
-    if(first->id == second->id && first->successor == second->successor && first->predecessor== second->predecessor) {
-        return true;
-    }
-    return false;
-}
-
-struct node *get_own_node(void) {
-    return &mynode;
-}
-
-static int copy_node(struct node *node,struct node *copy) {
-    memcpy(copy, node, sizeof(struct node));
-    assert(copy->addr.sin6_family == node->addr.sin6_family);
-    assert(copy->id == node->id);
-    return CHORD_OK;
-}
-
-int get_mod_of_hash(unsigned char *hash,int modulo) {
-    int remainder = 0;
-    for (int i = 0;  i < HASH_DIGEST_SIZE; ++i)
-    {
-        remainder = (remainder * 10 + hash[i]) % modulo;
-    }
-    return remainder;
-}
-
-static int chord_send_nonblock_sock(int sock, unsigned char *msg, size_t size,struct sockaddr* addr,socklen_t addr_len) {
-    return sendto(sock, msg, size, 0, addr, addr_len);
-}
-
-
 static void debug_print_fingertable(void) {
     printf("fingertable of %d:\n",mynode.id);
         for (int i = 0; i < FINGERTABLE_SIZE;i++) {
@@ -153,6 +58,7 @@ static void debug_print_fingertable(void) {
             }
         }
 }
+
 static void debug_print_successorlist(void) {
     printf("successorlist of %d:\n",mynode.id);
     int myid = -1;
@@ -160,7 +66,7 @@ static void debug_print_successorlist(void) {
     {
         myid = mynode.successor->id;
     }
-    for (int i = 0; i < FINGERTABLE_SIZE; i++)
+    for (int i = 0; i < SUCCESSORLIST_SIZE; i++)
     {
         if (!node_is_null(&successorlist[i]))
         {
@@ -215,41 +121,124 @@ static int bind_socket(struct node *node) {
     return CHORD_OK;
 }
 
-char *msg_to_string(chord_msg_t msg) {
-    switch(msg) {
-        case MSG_TYPE_NULL:
-            return "MSG_TYPE_NULL";
-        case MSG_TYPE_GET_PREDECESSOR:
-            return "MSG_TYPE_GET_PREDECESSOR";
-        case MSG_TYPE_GET_PREDECESSOR_RESP:
-            return "MSG_TYPE_GET_PREDECESSOR_RESP";
-        case MSG_TYPE_GET_PREDECESSOR_RESP_NULL:
-            return "MSG_TYPE_GET_PREDECESSOR_RESP_NULL";
-        case MSG_TYPE_FIND_SUCCESSOR:
-            return "MSG_TYPE_FIND_SUCCESSOR";
-        case MSG_TYPE_FIND_SUCCESSOR_RESP:
-            return "MSG_TYPE_FIND_SUCCESSOR_RESP";
-        case MSG_TYPE_FIND_SUCCESSOR_RESP_NEXT:
-            return "MSG_TYPE_FIND_SUCCESSOR_RESP_NEXT";
-        case MSG_TYPE_GET_SUCCESSOR:
-            return "MSG_TYPE_GET_SUCCESSOR";
-        case MSG_TYPE_GET_SUCCESSOR_RESP:
-            return "MSG_TYPE_GET_SUCCESSOR_RESP";
-        case MSG_TYPE_PING:
-            return "MSG_TYPE_PING";
-        case MSG_TYPE_PONG:
-            return "MSG_TYPE_PONG";
-        case MSG_TYPE_NO_WAIT:
-            return "MSG_TYPE_NO_WAIT";
-        case MSG_TYPE_NOTIFY:
-            return "MSG_TYPE_NOTIFY";
-        case MSG_TYPE_COPY_SUCCESSORLIST:
-            return "MSG_TYPE_COPY_SUCCESSORLIST";
-        case MSG_TYPE_COPY_SUCCESSORLIST_RESP:
-            return "MSG_TYPE_COPY_SUCCESSORLIST_RESP";
-        default:
-            return "UNKNOWN";
+
+static int init_fingertable(void) {
+    nodeid_t start = 0;
+    nodeid_t interval = 0;
+    for (int i = 0; i < FINGERTABLE_SIZE; i++)
+    {
+        start = (mynode.id + ((1 << i) % CHORD_RING_SIZE)) % CHORD_RING_SIZE;
+        interval = (mynode.id + ((1 << (i + 1)) % CHORD_RING_SIZE)) % CHORD_RING_SIZE;
+        interval -= start;
+        fingertable[i].start = start;
+        fingertable[i].interval = interval;
+        memset(&fingertable[i].node, 0, sizeof(fingertable[i].node));
+    }
+    return CHORD_OK;
+}
+
+int get_mod_of_hash(unsigned char *hash,int modulo) {
+    int remainder = 0;
+    for (int i = 0;  i < HASH_DIGEST_SIZE; ++i)
+        remainder = (remainder * 10 + hash[i]) % modulo;
+    return remainder;
+}
+
+int init_chord(const char *node_addr){
+    memset(&mynode, 0, sizeof(mynode));
+    memset(&predecessor, 0, sizeof(predecessor));
+    memset(successorlist, 0, sizeof(successorlist));
+    int ret = inet_pton(AF_INET6, node_addr, &(mynode.addr.sin6_addr));
+    if (ret != 1)
+    {
+        if(ret == -1) {
+            perror("Error in inet_pton");
         }
+        else if (ret == 0)
+        {
+            DEBUG(ERROR,"Addr is not a valid IPv6 address\n");
+        }
+        else
+        {
+            DEBUG(ERROR,"Unknown error in inet_pton\n");
+        }
+        return CHORD_ERR;
+    }
+    unsigned char hash_id[HASH_DIGEST_SIZE];
+    hash(hash_id, (char *)&(mynode.addr.sin6_addr), sizeof(mynode.addr.sin6_addr), HASH_DIGEST_SIZE);
+    mynode.id = get_mod_of_hash(hash_id,CHORD_RING_SIZE);
+    mynode.predecessor = &predecessor;
+    DEBUG(INFO,"Update successorlist to %d\n",successorlist[0].id);
+    mynode.successor = &fingertable[0].node;
+    init_fingertable();
+    srand(mynode.id);
+    if(bind_socket(&mynode) == CHORD_ERR) {
+        return CHORD_ERR;
+    }
+    return 0;
+}
+
+static int is_finger(struct node *n,struct fingertable_entry *entry) {
+    if(!n || !entry) {
+        return false;
+    }
+    if(entry->node.id > ((entry->start+entry->interval)%CHORD_RING_SIZE)) {
+        if(n->id > (entry->start+entry->interval) && n->id < entry->node.id) {
+            return true;
+        }
+    } else if(entry->node.id < ((entry->start+entry->interval)%CHORD_RING_SIZE)){
+        if(n->id < (entry->start+entry->interval) && n->id > entry->node.id) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool in_interval(struct node *first, struct node *second, nodeid_t id) {
+    if(!first || !second) {
+        return false;
+    }
+    if(first->id == second->id) {
+        return true;
+    }
+    if(in_interval_id(first->id, second->id, id)) {
+        DEBUG(DEBUG, "%d in [%d,%d)\n",id, first->id,second->id);
+        return true;
+    }
+    else
+    {
+        DEBUG(DEBUG, "%d not in [%d,%d)\n",id, first->id,second->id);
+        return false;
+    }
+}
+
+bool node_is_null(struct node *node) {
+    if(!node) {
+        return false;
+    }
+    if (node->id == 0 && !node->successor && !node->predecessor)
+    {
+        return true;
+    }
+    return false;
+}
+
+bool node_cmp(struct node *first, struct node *second) {
+    if(first->id == second->id && first->successor == second->successor && first->predecessor== second->predecessor) {
+        return true;
+    }
+    return false;
+}
+
+static int copy_node(struct node *node,struct node *copy) {
+    memcpy(copy, node, sizeof(struct node));
+    assert(copy->addr.sin6_family == node->addr.sin6_family);
+    assert(copy->id == node->id);
+    return CHORD_OK;
+}
+
+static int chord_send_nonblock_sock(int sock, unsigned char *msg, size_t size,struct sockaddr* addr,socklen_t addr_len) {
+    return sendto(sock, msg, size, 0, addr, addr_len);
 }
 
 static unsigned char *craft_message(chord_msg_t msg_type, nodeid_t dst_id, size_t size, char *content) {
@@ -380,7 +369,7 @@ static struct node *find_successor_in_fingertable(nodeid_t nodeid) {
             }
         }
     }
-    for (int i = FINGERTABLE_SIZE-1; i >= 0;i--) {
+    for (int i = SUCCESSORLIST_SIZE-1; i >= 0;i--) {
         if(!node_is_null(&successorlist[i])&& best_match) {
             if(in_interval_id(nodeid,best_match->id,successorlist[i].id) && successorlist[i].id < best_match->id) {
                 DEBUG(DEBUG,"search successorlist for %d would return %d < %d\n",nodeid,successorlist[i].id,best_match->id);
@@ -401,12 +390,12 @@ int find_successor(struct node *target,struct node *ret, nodeid_t id) {
     int steps = 1;
     while (final == NULL)
     {
-        unsigned char *msg = craft_message(MSG_TYPE_FIND_SUCCESSOR, target->id, CHORD_FIND_SUCCESSOR_SIZE, (char *)&id);
+        unsigned char *msg = craft_message(MSG_TYPE_FIND_SUCCESSOR, target->id, sizeof(struct node), (char *)&id);
         if(!msg) {
             free(tmp);
             return CHORD_ERR;
         }
-        chord_msg_t type = chord_send_block_and_wait(target, msg, CHORD_HEADER_SIZE + CHORD_FIND_SUCCESSOR_SIZE, MSG_TYPE_FIND_SUCCESSOR_RESP, (char *)ret, sizeof(struct node));
+        chord_msg_t type = chord_send_block_and_wait(target, msg, CHORD_HEADER_SIZE + sizeof(struct node), MSG_TYPE_FIND_SUCCESSOR_RESP, (char *)ret, sizeof(struct node));
         free_message(msg);
         if (type == MSG_TYPE_FIND_SUCCESSOR_RESP_NEXT)
         {
@@ -443,7 +432,11 @@ int find_successor(struct node *target,struct node *ret, nodeid_t id) {
 }
 
 int notify(struct node *target) {
-    unsigned char *msg = craft_message(MSG_TYPE_NOTIFY,target->id, sizeof(struct node),(char *)(&mynode));
+    if(!target) {
+        return CHORD_ERR;
+    }
+    DEBUG(INFO,"Notify successor %d\n",target->id);
+    unsigned char *msg = craft_message(MSG_TYPE_NOTIFY, target->id, sizeof(struct node), (char *)(&mynode));
     chord_msg_t type = chord_send_block_and_wait(target, msg, CHORD_HEADER_SIZE + sizeof(struct node),MSG_TYPE_NO_WAIT,NULL,0);
     if(type == MSG_TYPE_CHORD_ERR) {
         DEBUG(ERROR,"Error in notify\n");
@@ -502,24 +495,10 @@ int join(struct node *src, struct node *target) {
     return CHORD_OK;
 }
 
-/*static struct node *get_successor(struct node *src,struct node *pre) {
-    unsigned char *msg = craft_message(MSG_TYPE_GET_SUCCESSOR,src->id, sizeof(nodeid_t),(char *)(&(mynode.id)));
-    while(true) {
-        chord_msg_t type = chord_send_block_and_wait(src, msg, CHORD_HEADER_SIZE + CHORD_PING_SIZE,MSG_TYPE_GET_SUCCESSOR_RESP,(unsigned char *)pre,sizeof(struct node));
-        free_message(msg);
-        if (type == MSG_TYPE_GET_SUCCESSOR_RESP)
-        {
-            return CHORD_ERR;
-        } else {
-            DEBUG("get msg type %s\n",msg_to_string(type));
-        }
-    }
-}*/
-
 static int get_predecessor(struct node *src,struct node *pre) {
     unsigned char *msg = craft_message(MSG_TYPE_GET_PREDECESSOR,src->id, sizeof(nodeid_t),(char *)(&(mynode.id)));
     while(true) {
-        chord_msg_t type = chord_send_block_and_wait(src, msg, CHORD_HEADER_SIZE + CHORD_PING_SIZE, MSG_TYPE_GET_PREDECESSOR_RESP, (char *)pre, sizeof(struct node));
+        chord_msg_t type = chord_send_block_and_wait(src, msg, CHORD_HEADER_SIZE + sizeof(nodeid_t), MSG_TYPE_GET_PREDECESSOR_RESP, (char *)pre, sizeof(struct node));
         free_message(msg);
         if (type == MSG_TYPE_GET_PREDECESSOR_RESP)
         {
@@ -543,16 +522,6 @@ static bool is_pre(nodeid_t id) {
     }
     return false;
 }
-
-/*static bool is_suc(nodeid_t id) {
-    if(!mynode.successor) {
-        return true;
-    }
-    if(in_interval(&mynode,mynode.successor,id)) {
-        return true;
-    }
-    return false;
-}*/
 
 static int generic_wait(struct node *node,unsigned char *retbuf,size_t bufsize) {
     chord_msg_t type = 0;
@@ -628,7 +597,7 @@ static int generic_wait(struct node *node,unsigned char *retbuf,size_t bufsize) 
             }
             case MSG_TYPE_PING: {
                     unsigned char *msg = craft_message(MSG_TYPE_PONG, src_id,  sizeof(nodeid_t), (char *)&(mynode.id));
-                    int ret = chord_send_nonblock_sock(sock, msg, CHORD_HEADER_SIZE + CHORD_PING_SIZE, (struct sockaddr *)&src_addr, src_addr_len);
+                    int ret = chord_send_nonblock_sock(sock, msg, CHORD_HEADER_SIZE + sizeof(nodeid_t), (struct sockaddr *)&src_addr, src_addr_len);
                     if(ret == CHORD_ERR) {
                         DEBUG(ERROR,"Error in send PONG\n");
                     }
@@ -662,11 +631,13 @@ static int generic_wait(struct node *node,unsigned char *retbuf,size_t bufsize) 
             {
                 struct node n;
                 memcpy(&n, content, sizeof(struct node));
-                if(is_pre(n.id)) {
+                DEBUG(INFO,"get notify from %d curr is: %d\n",n.id,mynode.predecessor->id);
+                if (is_pre(n.id))
+                {
                     if(!node_is_null(mynode.predecessor)) {
-                        DEBUG(INFO,"update pre old %d new %d\n",mynode.predecessor->id,n.id);
+                        DEBUG(INFO,"got notify update pre old %d new %d\n",mynode.predecessor->id,n.id);
                     } else {
-                        DEBUG(INFO,"update pre old nil new %d\n",n.id);
+                        DEBUG(INFO,"got notify update pre old nil new %d\n",n.id);
                     }
                     copy_node(&n, mynode.predecessor);
                     assert(mynode.predecessor && n.id == mynode.predecessor->id);
@@ -728,63 +699,10 @@ static int stabilize(struct node *node) {
                 memcpy(node->predecessor,node->successor,sizeof(struct node));
             }
         } else {
-            DEBUG(INFO,"Could not reach successor, try\n");
-            DEBUG(INFO,"Update successorlist to %d\n", successorlist[0].id);
-            struct node *new_successor = get_next_successor();
-            copy_node(new_successor, mynode.successor);
-            return CHORD_ERR;
+            DEBUG(ERROR,"Could not reach successor\n");
         }
     }
     return CHORD_OK;
-}
-
-static int init_fingertable() {
-    nodeid_t start = 0;
-    nodeid_t interval = 0;
-    for (int i = 0; i < FINGERTABLE_SIZE; i++)
-    {
-        start = (mynode.id + ((1 << i) % CHORD_RING_SIZE)) % CHORD_RING_SIZE;
-        interval = (mynode.id + ((1 << (i + 1)) % CHORD_RING_SIZE)) % CHORD_RING_SIZE;
-        interval -= start;
-        fingertable[i].start = start;
-        fingertable[i].interval = interval;
-        memset(&fingertable[i].node, 0, sizeof(fingertable[i].node));
-    }
-    return CHORD_OK;
-}
-
-int init_chord(const char *node_addr){
-    memset(&mynode, 0, sizeof(mynode));
-    memset(&predecessor, 0, sizeof(predecessor));
-    memset(successorlist, 0, sizeof(successorlist));
-    int ret = inet_pton(AF_INET6, node_addr, &(mynode.addr.sin6_addr));
-    if (ret != 1)
-    {
-        if(ret == -1) {
-            perror("Error in inet_pton");
-        }
-        else if (ret == 0)
-        {
-            DEBUG(ERROR,"Addr is not a valid IPv6 address\n");
-        }
-        else
-        {
-            DEBUG(ERROR,"Unknown error in inet_pton\n");
-        }
-        return CHORD_ERR;
-    }
-    unsigned char hash_id[HASH_DIGEST_SIZE];
-    hash(hash_id, (char *)&(mynode.addr.sin6_addr), sizeof(mynode.addr.sin6_addr), HASH_DIGEST_SIZE);
-    mynode.id = get_mod_of_hash(hash_id,CHORD_RING_SIZE);
-    mynode.predecessor = &predecessor;
-    DEBUG(INFO,"Update successorlist to %d\n",successorlist[0].id);
-    mynode.successor = &fingertable[0].node;
-    init_fingertable();
-    srand(mynode.id);
-    if(bind_socket(&mynode) == CHORD_ERR) {
-        return CHORD_ERR;
-    }
-    return 0;
 }
 
 struct node *create_node(char *address) {
@@ -853,9 +771,9 @@ static bool send_ping(struct node *node) {
     if(node_is_null(node)) {
         return true;
     }
-    unsigned char *msg = craft_message(MSG_TYPE_PING,node->id,CHORD_PING_SIZE,(char *)(&(mynode.id)));
+    unsigned char *msg = craft_message(MSG_TYPE_PING,node->id,sizeof(nodeid_t),(char *)(&(mynode.id)));
     nodeid_t retid = 0;
-    chord_msg_t type = chord_send_block_and_wait(node, msg, CHORD_HEADER_SIZE + CHORD_FIND_SUCCESSOR_SIZE, MSG_TYPE_PONG, (char *)&retid, sizeof(nodeid_t));
+    chord_msg_t type = chord_send_block_and_wait(node, msg, CHORD_HEADER_SIZE + sizeof(struct node), MSG_TYPE_PONG, (char *)&retid, sizeof(nodeid_t));
     free_message(msg);
     if (type == MSG_TYPE_PONG && retid == node->id)
     {
@@ -918,6 +836,7 @@ void *thread_wait_for_msg(void *n){
     }
     return NULL;
 }
+
 void *thread_periodic(void *n){
     int i = 0, factor = 0, limit = 2;
     struct node *node = (struct node *)n;
@@ -957,10 +876,10 @@ void *thread_periodic(void *n){
                     memset(&fingertable[i].node, 0, sizeof(fingertable[i].node));
                 }
             }
-            memcpy(mynode.predecessor,&successorlist[0],sizeof(struct node));
+            memset(mynode.predecessor, 0, sizeof(struct node));
         }
-
-        if (!check_successor(&mynode))
+        int next_successor = 0;
+        while (!check_successor(&mynode))
         {
             DEBUG(ERROR,"Error: suc do not respond to ping\n");
             for (int i = 0; i < FINGERTABLE_SIZE;i++) {
@@ -968,9 +887,10 @@ void *thread_periodic(void *n){
                     memset(&fingertable[i].node, 0, sizeof(fingertable[i].node));
                 }
             }
-            DEBUG(INFO,"Update sucessor to %d\n",successorlist[1].id);
-            struct node *new_successor = get_next_successor();
-            copy_node(new_successor, mynode.successor);
+            DEBUG(INFO,"Update sucessor to %d\n",successorlist[next_successor].id);
+            copy_node(&successorlist[next_successor], mynode.successor);
+            notify(mynode.successor);
+            i++;
         }
         DEBUG(INFO,"Fix fingers\n");
         fix_fingers(&mynode);

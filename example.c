@@ -6,6 +6,7 @@
 #include <openssl/sha.h>
 #include <unistd.h>
 int hash(unsigned char *out, const char *in,size_t in_size,size_t out_size){
+    printf("out size: %lu\n",out_size);
     SHA1((unsigned char *)in, in_size, out);
     return 0;
 }
