@@ -692,11 +692,12 @@ static int wait_for_message(struct node *node,unsigned char *retbuf,size_t bufsi
 
 static int stabilize(struct node *node) {
     struct node pre;
+    int ret = CHORD_OK;
     if (!node_is_null(node->successor))
     {
         memset(&pre, 0, sizeof(pre));
-        int ret = get_predecessor(node->successor, &pre);
-        DEBUG(INFO,"got pre %p %d\n",(void *)&pre,(int)pre.id);
+        ret = get_predecessor(node->successor, &pre);
+        DEBUG(INFO,"got pre %p with id %d ret: %d %d\n",(void *)&pre,(int)pre.id,ret,CHORD_ERR);
         if (ret != CHORD_ERR)
         {
             if (!node_is_null(&pre))
@@ -714,14 +715,14 @@ static int stabilize(struct node *node) {
             } else {
                 memcpy(node->predecessor,node->successor,sizeof(struct node));
             }
+            if(!node_is_null(mynode.successor)) {
+                notify(mynode.successor);
+            }
         } else {
             DEBUG(ERROR,"Could not reach successor\n");
         }
-        if(!node_is_null(mynode.successor)) {
-          notify(mynode.successor);
-        }
     }
-    return CHORD_OK;
+    return ret;
 }
 
 struct node *create_node(char *address) {
@@ -819,7 +820,7 @@ static void fix_fingers(struct node *node) {
 static bool send_ping(struct node *node) {
     if(node_is_null(node)) {
         //TODO: Remove
-        return true;
+        return false;
     }
     unsigned char *msg = craft_message(MSG_TYPE_PING,node->id,sizeof(nodeid_t),(char *)(&(mynode.id)));
     nodeid_t retid = -1;
@@ -834,10 +835,12 @@ static bool send_ping(struct node *node) {
 }
 
 static bool check_predecessor(struct node *node ){
+    DEBUG(INFO,"check pre %d\n",node->predecessor->id);
     return send_ping(node->predecessor);
 }
 
 static bool check_successor(struct node *node ){
+    DEBUG(INFO,"check suc %d\n",node->successor->id);
     return send_ping(node->successor);
 }
 
@@ -877,19 +880,19 @@ void *thread_periodic(void *n){
         }
 
         DEBUG(INFO,"stabilze\n");
-        stabilize(&mynode);
-        if(factor == limit) {
-            DEBUG(INFO,"Update successorlist\n");
-            update_successorlist();
-            factor = 0;
-        } else {
-            factor++;
+        if(stabilize(&mynode) == CHORD_OK) {
+            if(factor == limit) {
+                DEBUG(INFO,"Update successorlist\n");
+                update_successorlist();
+                factor = 0;
+            } else {
+                factor++;
+            }
         }
 
-        DEBUG(INFO,"check pre\n");
         if (!node_is_null(mynode.predecessor) && !check_predecessor(&mynode))
         {
-            DEBUG(ERROR,"ERROR PRE Do not respond to ping\n");
+            DEBUG(ERROR,"ERROR PRE %d Do not respond to ping\n",mynode.predecessor->id);
             for (int i = 0; i < FINGERTABLE_SIZE;i++) {
                 if(!node_is_null(&fingertable[i].node) && fingertable[i].node.id == mynode.predecessor->id) {
                     memset(&fingertable[i].node, 0, sizeof(fingertable[i].node));
@@ -900,7 +903,7 @@ void *thread_periodic(void *n){
         int next_successor = 0;
         while (!check_successor(&mynode))
         {
-            DEBUG(ERROR,"Error: suc do not respond to ping\n");
+            DEBUG(ERROR,"Error: suc %d do not respond to ping\n",mynode.successor->id);
             for (int i = 0; i < FINGERTABLE_SIZE;i++) {
                 if(!node_is_null(&fingertable[i].node) && fingertable[i].node.id == mynode.successor->id) {
                     memset(&fingertable[i].node, 0, sizeof(fingertable[i].node));

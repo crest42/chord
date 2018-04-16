@@ -15,10 +15,12 @@ my @childs;
 my $sleep = 10;
 
 my $kill;
-my $spawn; 
+my $spawn;
+my $max;
 my $verbose;
   GetOptions ("nodes=i" => \$nodes,    # numeric
               "kill=i"   => \$kill,      # numeric
+              "max=i"   => \$max,      # numeric
               "spawn=i"   => \$spawn,      # numeric
               "verbose"  => \$verbose)   # flag
   or die("Error in command line arguments\n");
@@ -74,7 +76,7 @@ for(my $i = 0;$i<$nodes && $end == 0;$i++) {
 #        splice(@childs,$victim,1);
 #    }
 #}
-
+my $ret = 0;
 my $c = 0;
 my @sorted;
 while($end == 0) {
@@ -164,8 +166,17 @@ while($end == 0) {
     }
     $c++;
     if($verbose) {
-      print Dumper(@sorted);
-      print "Run $c sync: $not_in_sync end: $end\n";
+        print Dumper(@sorted);
+        if(defined($max)) {
+            print "Run $c/$max sync: $not_in_sync end: $end\n";
+        }
+        else {
+            print "Run $c sync: $not_in_sync end: $end\n";
+        }
+    }
+    if(defined($max) && $c == $max) {
+        $ret = $not_in_sync;
+        last
     }
     if($not_in_sync == 0 || $end > 0){
         if(!defined($kill)) {
@@ -197,5 +208,4 @@ for(my $i = 0;$i<@childs;$i++) {
         system("kill $childs[$i]{pid}");
     }
 }
-
-
+exit($ret);

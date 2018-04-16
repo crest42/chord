@@ -1,7 +1,10 @@
-PHONY = all example lib test
+PHONY = all example lib test fulltest
 .DEFAULT_GOAL := all
 WFLAGS := -Wall -Wextra
 all: example
+
+debug: clean
+	@$(MAKE) CCFLAGS="-DDEBUG_ENABLE -DDEV"  all
 
 example: lib example.o
 	$(CC) example.o -o example -lcrypto -lpthread libchord.a $(CCFLAGS) $(WFLAGS)
@@ -22,3 +25,8 @@ clean:
 
 test: clean all
 	perl testsuite.pl $(TARGS)
+
+autotest: clean all
+	perl testsuite.pl -n 8 -m 4 -v || exit
+	perl testsuite.pl -n 64 -m 256 || exit
+	perl testsuite.pl -n 8 -k 10 || exit

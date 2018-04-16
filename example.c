@@ -68,7 +68,7 @@ int main(int argc, char *argv[]) {
     sprintf(fname, "./log/chord.%d.log", getpid());
     fp = fopen(fname, "w");
     if(!fp) {
-        perror("open stateq");
+        perror("open state");
         exit(0);
     }
 

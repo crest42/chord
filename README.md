@@ -21,6 +21,19 @@ BUILD:
 With example: make all
 Lib only: make lib
 Tests: make test
+Debug Output enabled: make debug
+```
+
+Testing:
+
+```
+make TARGS="<test args>" test
+test args:
+  --verbose | -v: Verbose mose
+  --kill n | -k n: kill a child every n seconds
+  --nodes | -n n: spawn n nodes
+
+make autotest
 ```
 
 USAGE:
