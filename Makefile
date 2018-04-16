@@ -20,5 +20,5 @@ chord.o: chord.c chord.h
 clean:
 	rm -rf *.a *.o example
 
-test: all
-	./testsuite
+test: clean all
+	perl testsuite.pl $(TARGS)

@@ -153,8 +153,8 @@ static int bind_socket(struct node *node) {
     setsockopt(node->socket, SOL_SOCKET, SO_REUSEADDR, &option, sizeof(option));
 
     node->addr.sin6_family = AF_INET6;
-    node->addr.sin6_port = htons(CHORD_PORT+node->id);
-    DEBUG(INFO,"bind %d\n",CHORD_PORT+node->id );
+    node->addr.sin6_port = htons(CHORD_PORT);
+    DEBUG(INFO,"bind %d\n",CHORD_PORT );
     if ((bind(node->socket, (struct sockaddr *)&node->addr, sizeof(node->addr))) == -1)
     {
         perror("Error on bind");
@@ -311,7 +311,7 @@ static int chord_send_block_and_wait(struct node *target, unsigned char *msg, si
     DEBUG(DEBUG, "chord_send_block_and_wait new sock: %d\n", s);
     struct sockaddr_in6 tmpaddr, src_tmpaddr;
     memcpy(&tmpaddr, &target->addr, sizeof(struct sockaddr_in6));
-    assert(tmpaddr.sin6_port == htons(CHORD_PORT+target->id));
+    assert(tmpaddr.sin6_port == htons(CHORD_PORT));
     memcpy(&src_tmpaddr, &mynode.addr, sizeof(struct sockaddr_in6));
     src_tmpaddr.sin6_port = htons(ntohs(src_tmpaddr.sin6_port)+1);
     DEBUG(INFO, "bind to %d\n", ntohs(src_tmpaddr.sin6_port));
@@ -757,7 +757,7 @@ struct node *create_node(char *address) {
     DEBUG(INFO,"create node with addr %s\n",address);
 
     node->addr.sin6_family = AF_INET6;
-    node->addr.sin6_port = htons(CHORD_PORT+node->id);
+    node->addr.sin6_port = htons(CHORD_PORT);
 
     bind(node->socket, (struct sockaddr *)&mynode.addr, sizeof(struct sockaddr_in6));
 
@@ -912,7 +912,9 @@ void *thread_periodic(void *n){
         }
         DEBUG(INFO,"Fix fingers\n");
         fix_fingers(&mynode);
-        debug_print_node(&mynode,false);
+        #ifdef DEBUG_ENABLE
+        debug_print_node(&mynode,true);
+        #endif
         sleep(CHORD_PERIODIC_SLEEP);
     }
     return NULL;
