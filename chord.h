@@ -7,16 +7,17 @@
 #include <arpa/inet.h>
 #include <stddef.h>
 
+FILE *default_out;
 enum log_level
 {
-    OFF     = 0x0,
-    FATAL   = 0x1,
-    ERROR   = 0x3,
-    WARN    = 0x7,
-    INFO    = 0xf,
-    DEBUG   = 0x1f,
-    TRACE   = 0x3f,
-    ALL     = 0xff
+  OFF = 0x0,
+  FATAL = 0x1,
+  ERROR = 0x3,
+  WARN = 0x7,
+  INFO = 0xf,
+  DEBUG = 0x1f,
+  TRACE = 0x3f,
+  ALL = 0xff
 };
 
 #define DEBUG_MAX_FUNC_NAME 20
@@ -116,7 +117,6 @@ struct fingertable_entry {
     nodeid_t interval;
     struct node node;
 };
-
 struct node *create_node(char *address);
 struct node *get_own_node(void);
 

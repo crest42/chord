@@ -4,7 +4,6 @@
 #include <unistd.h>
 #include <assert.h>
 
-
 #ifdef DEBUG_ENABLE
 static const char *log_level_to_string(enum log_level level){
     switch (level)
@@ -66,7 +65,13 @@ static char *msg_to_string(chord_msg_t msg) {
 }
 #endif
 #ifdef DEBUG_ENABLE
-static void debug_printf(unsigned long t,const char *fname,enum log_level level, const char* format, ... ) {
+static void debug_printf(unsigned long t, const char *fname, enum log_level level, const char *format, ...)
+{
+    FILE *out = default_out;
+    if(level <= ERROR) {
+        out = stderr;
+    }
+
     if((level & DEBUG_LEVEL) != level) {
         return;
     }
@@ -76,10 +81,10 @@ static void debug_printf(unsigned long t,const char *fname,enum log_level level,
     for (int i = strlen(max_func_name); i < DEBUG_MAX_FUNC_NAME-1;i++) {
         max_func_name[i] = ' ';
     }
-    printf("%lu: [%d|%d] [%s] %s: ",t,mynode.id,	_getpid(),log_level_to_string(level),max_func_name);
+    fprintf(out,"%lu: [%d|%d] [%s] %s: ",t,mynode.id,	_getpid(),log_level_to_string(level),max_func_name);
     va_list args;
     va_start( args, format );
-    vprintf( format, args );
+    vfprintf(out, format, args );
     va_end( args );
     return;
 }
@@ -182,6 +187,7 @@ int get_mod_of_hash(unsigned char *hash,int modulo) {
 }
 
 int init_chord(const char *node_addr){
+    default_out = stdout;
     memset(&mynode, 0, sizeof(mynode));
     memset(&predecessor, 0, sizeof(predecessor));
     memset(successorlist, 0, sizeof(successorlist));
@@ -368,7 +374,7 @@ static int chord_send_block_and_wait(struct node *target, unsigned char *msg, si
             DEBUG(INFO,"find expected answer %s == %s\n", msg_to_string(type), msg_to_string(wait));
              break;
         } else {
-            DEBUG(ERROR,"Did not find expected answer %s != %s\n", msg_to_string(type), msg_to_string(wait));
+            DEBUG(INFO,"Did not find expected answer %s != %s\n", msg_to_string(type), msg_to_string(wait));
             break;
         }
     }
@@ -397,10 +403,9 @@ static struct node *find_successor_in_fingertable(nodeid_t nodeid) {
         }
     }
     if(best_match) {
-        DEBUG(DEBUG,"final would return %d\n",best_match->id);
-        return best_match;
+        DEBUG(INFO,"final would return %d\n",best_match->id);
     }
-    return NULL;
+    return best_match;
 }
 
 int find_successor(struct node *target,struct node *ret, nodeid_t id) {
@@ -438,8 +443,8 @@ int find_successor(struct node *target,struct node *ret, nodeid_t id) {
             return CHORD_ERR;
         }
     }
-    //According to the Protocol we should always need a maximum of log(CHORD_RING_SIZE) steps
-    assert(steps <= CHORD_RING_BITS);
+    //According to the Protocol we should always need a maximum of log(CHORD_RING_SIZE) steps TODO: This is not guaranteed (for example if we spawn a large number of nodes in short time)
+    //assert(steps <= CHORD_RING_BITS);
     free(tmp);
     nodeid_t ret_id = ret->id;
     if(ret_id == 0) {
@@ -510,8 +515,7 @@ int join(struct node *src, struct node *target) {
     }
     DEBUG(INFO,"Update successorlist");
     copy_successorlist(src->successor);
-    notify(src->successor);
-    return CHORD_OK;
+     return CHORD_OK;
 }
 
 static int get_predecessor(struct node *src,struct node *pre) {
@@ -697,18 +701,11 @@ static int stabilize(struct node *node) {
         {
             if (!node_is_null(&pre))
             {
-                if (node->id != pre.id)
+                if (node->id != pre.id && in_interval(node,node->successor,pre.id))
                 {
                     DEBUG(INFO,"looks like me->suc->pre is new: %d me: %d\n", pre.id, mynode.id);
-                    if(node->successor->id != mynode.id) {
-                      notify(node->successor);
-                    }
                     copy_node(&pre, &fingertable[0].node);
                     DEBUG(INFO,"Update successor to %d\n",mynode.successor->id);
-                }
-                else if (node_is_null(node->predecessor))
-                {
-                    memcpy(node->predecessor,node->successor,sizeof(struct node));
                 }
                 else
                 {
@@ -719,6 +716,9 @@ static int stabilize(struct node *node) {
             }
         } else {
             DEBUG(ERROR,"Could not reach successor\n");
+        }
+        if(!node_is_null(mynode.successor)) {
+          notify(mynode.successor);
         }
     }
     return CHORD_OK;
@@ -908,12 +908,11 @@ void *thread_periodic(void *n){
             }
             DEBUG(INFO,"Update sucessor to %d\n",successorlist[next_successor].id);
             copy_node(&successorlist[next_successor], mynode.successor);
-            notify(mynode.successor);
             next_successor++;
         }
         DEBUG(INFO,"Fix fingers\n");
         fix_fingers(&mynode);
-        debug_print_node(&mynode,true);
+        debug_print_node(&mynode,false);
         sleep(CHORD_PERIODIC_SLEEP);
     }
     return NULL;

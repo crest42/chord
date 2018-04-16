@@ -20,30 +20,30 @@ function kill_helper {
 function check_output {
   sleep 1
   for i in $(seq 0 $NODES); do
-    HASH=${ADDR[$i]}
     if [[ "${ADDR[$i]}" == "0" ]]; then
       continue;
     fi
     OUT[$i]=$(grep FINAL ${NODEOUT[$i]} | awk '{gsub("FINAL: ", "", $0); print}')
-    rm -rf ${NODEOUT[$i]}
-    echo "Node $HASH exit with out ${OUT[$i]}"
+    echo ${NODEOUT[$i]}
+    #rm -rf ${NODEOUT[$i]}
   done
   OUT_SORT=( $( printf "%s\n" "${OUT[@]}" | sort -n ) )
   FIRST=$(echo ${OUT_SORT[-1]} | perl -n -e'/(\d+)<-(\d+)->(\d+)/ && print $2')
   LAST=$(echo ${OUT_SORT[-1]} | perl -n -e'/(\d+)<-(\d+)->(\d+)/ && print $1')
   #echo -n "$FIRST->"
   # echo ${OUT_SORT[-1]}
-  HELPER=$(($NODES-1))
   LASTELEM=0
-  for i in $(seq 0 $HELPER); do
+  for i in $(seq 0 $NODES); do
+    HASH=${ADDR[$i]}
+    echo "Node $HASH exit with out ${OUT_SORT[$i]}"
     CUR_NODE=${OUT_SORT[$i]}
     BEFORE=$(echo $CUR_NODE | perl -n -e'/(\d+)<-(\d+)->(\d+)/ && print $1')
     ME=$(echo $CUR_NODE | perl -n -e'/(\d+)<-(\d+)->(\d+)/ && print $2')
     AFTER=$(echo $CUR_NODE | perl -n -e'/(\d+)<-(\d+)->(\d+)/ && print $3')
     #echo ${OUT_SORT[$i]}
     if [[ "$ME" == "$LAST" ]];then
-      if [[ $i -ne $HELPER ]]; then
-        echo "ERROR: Node $CUR_NODE is last Element ($LAST), but index is only $i/$HELPER"
+      if [[ $i -ne $NODES ]]; then
+        echo "ERROR: Node $CUR_NODE is last Element ($LAST), but index is only $i/$NODES"
         exit 1;
       else
         echo "SUCCESS: Chord ring is correct"
@@ -92,8 +92,9 @@ for i in $(seq 0 $NODES); do
     echo "Start master with ${ADDR[$i]}"
     ./example master ${ADDR[$i]} > ${NODEOUT[$i]} &
   else
-    echo "Start slave ${ADDR[$i]} with master ${ADDR[0]}"
-   ./example slave ${ADDR[$i]} ${ADDR[0]} > ${NODEOUT[$i]} &
+    RND_NODE=${ADDR[$RANDOM % ${#ADDR[@]} ]}
+    echo "Start slave ${ADDR[$i]} with master $RND_NODE"
+   ./example slave ${ADDR[$i]} $RND_NODE > ${NODEOUT[$i]} &
   fi
   NODEPID[$i]=$!
   #sleep $SLEEP

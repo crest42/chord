@@ -5,8 +5,10 @@
 #include <signal.h>
 #include <openssl/sha.h>
 #include <unistd.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 int hash(unsigned char *out, const char *in,size_t in_size,size_t out_size){
-    printf("out size: %lu\n",out_size);
+    (void)(out_size);
     SHA1((unsigned char *)in, in_size, out);
     return 0;
 }
@@ -56,8 +58,32 @@ int main(int argc, char *argv[]) {
       memcpy(masterip, argv[2], INET6_ADDRSTRLEN-1);
     }
 
-    if(init_chord(nodeip) == CHORD_ERR) {
-        return -1;
+    FILE *fp;
+    struct stat st;
+    if (stat("./log", &st) == -1)
+    {
+        mkdir("./log", 0700);
+    }
+    char *fname = malloc(strlen("./log/chord.log") + 6);
+    sprintf(fname, "./log/chord.%d.log", getpid());
+    fp = fopen(fname, "w");
+    if(!fp) {
+        perror("open stateq");
+        exit(0);
+    }
+
+    char *log_fname = malloc(strlen("/tmp/chord_out.log") + 6);
+    memset(log_fname, 0, strlen("/tmp/chord_out.log") + 6);
+    sprintf(log_fname, "/tmp/chord_out.%d.log", getpid());
+    default_out = fopen(log_fname, "w");
+    if(!default_out) {
+        perror("open stdout log");
+        exit(0);
+    }
+
+if (init_chord(nodeip) == CHORD_ERR)
+{
+    return -1;
     }
     struct node *mynode = get_own_node();
     printf("nodekey for %s is: %d\n", nodeip,mynode->id);
@@ -78,7 +104,24 @@ int main(int argc, char *argv[]) {
     pthread_create(&mythread2, NULL, thread_periodic, (void *)mynode);
 
     signal(SIGINT, sig_handler);
-    while(!sigint) {
+    while (!sigint)
+    {
+        struct node *node = get_own_node();
+        if (!node_is_null(node->predecessor))
+        {
+            if(node->successor) {
+                fprintf(fp,"%d|%d|%d\n", node->predecessor->id,node->id,node->successor->id);
+            } else {
+                fprintf(fp,"%d|%d|NULL\n", node->predecessor->id,node->id);
+            }
+        } else {
+            if(node->successor) {
+                fprintf(fp,"NULL|%d|%d\n",node->id,node->successor->id);
+            } else {
+                fprintf(fp,"NULL|%d|NULL\n",node->id);
+            }
+        }
+        fflush(fp);
         sleep(1);
     }
     free(partner);
