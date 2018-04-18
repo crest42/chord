@@ -13,7 +13,6 @@ This Version is far from perfect and there is a lot of work to do. Its not exact
 TODO:
 
 - cleanup
-- static buffer for network msg should be possible
 
 BUILD:
 

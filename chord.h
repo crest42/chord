@@ -1,13 +1,11 @@
 #ifndef _LIBCHORD_H
 #define _LIBCHORD_H
 #include <stdlib.h>
-#include <stdio.h>
 #include <string.h>
 #include <sys/types.h>
 #include <arpa/inet.h>
 #include <stddef.h>
 
-FILE *default_out;
 enum log_level
 {
   OFF = 0x0,
@@ -22,9 +20,11 @@ enum log_level
 
 #define DEBUG_MAX_FUNC_NAME 20
 #ifdef DEBUG_ENABLE
+
   #include <time.h>
   #include <stdarg.h>
   #include <stdio.h>
+  FILE *default_out;
   #ifdef RIOT
     #include "thread.h"
     #define __FUNCTION__ ""
@@ -65,7 +65,7 @@ typedef uint16_t nodeid_t;
 #define CHORD_PORT (6667)
 #define CHORD_OK (0)
 #define CHORD_ERR (-1)
-#define CHORD_PERIODIC_SLEEP (2)
+#define CHORD_PERIODIC_SLEEP (1)
 #define CHORD_RING_SIZE (1<<CHORD_RING_BITS)
 
 
@@ -117,7 +117,7 @@ struct fingertable_entry {
     nodeid_t interval;
     struct node node;
 };
-struct node *create_node(char *address);
+int create_node(char *address,struct node *node);
 struct node *get_own_node(void);
 
 int find_successor(struct node *node, struct node *ret, nodeid_t id);

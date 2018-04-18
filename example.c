@@ -38,7 +38,7 @@ int main(int argc, char *argv[]) {
     char masterip[INET6_ADDRSTRLEN];
     memset(masterip, 0, INET6_ADDRSTRLEN);
     //bool master = false, slave = false;
-    struct node *partner = NULL;
+    struct node *partner = malloc(sizeof(struct node));
 
     if(!argv[1] || !(strcmp(argv[1],"master") == 0 || strcmp(argv[1],"slave") == 0) || !argv[2] || !inet_pton(AF_INET6, argv[2], buf)) {
         print_usage();
@@ -64,7 +64,7 @@ int main(int argc, char *argv[]) {
     {
         mkdir("./log", 0700);
     }
-    char *fname = malloc(strlen("./log/chord.log") + 6);
+    char *fname = malloc(strlen("./log/chord.log") + sizeof(pid_t)+4);
     sprintf(fname, "./log/chord.%d.log", getpid());
     fp = fopen(fname, "w");
     if(!fp) {
@@ -75,11 +75,13 @@ int main(int argc, char *argv[]) {
     char *log_fname = malloc(strlen("/tmp/chord_out.log") + 6);
     memset(log_fname, 0, strlen("/tmp/chord_out.log") + 6);
     sprintf(log_fname, "/tmp/chord_out.%d.log", getpid());
+    #ifdef DEBUG_ENABLE
     default_out = fopen(log_fname, "w");
     if(!default_out) {
         perror("open stdout log");
         exit(0);
     }
+    #endif
 
 if (init_chord(nodeip) == CHORD_ERR)
 {
@@ -95,7 +97,7 @@ if (init_chord(nodeip) == CHORD_ERR)
     else
     {
         printf("no master node here connect to %s\n",masterip);
-        partner = create_node(masterip);
+         create_node(masterip,partner);
         add_node(partner);
     }
     printf("create eventloop thread\n");
@@ -133,7 +135,9 @@ if (init_chord(nodeip) == CHORD_ERR)
         printf("Error cancle thread 2s\n");
     }
     printf("FINAL: ");
+    #ifdef DEBUG_ENABLE
     debug_print_node(mynode, false);
+    #endif
     fflush(stdout);
     pthread_join(mythread1,NULL);
     pthread_join(mythread2,NULL);

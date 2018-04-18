@@ -4,7 +4,7 @@ WFLAGS := -Wall -Wextra
 all: example
 
 debug: clean
-	@$(MAKE) CCFLAGS="-DDEBUG_ENABLE -DDEV"  all
+	@$(MAKE) CCFLAGS="-DDEBUG_ENABLE -DDEV -g"  all
 
 example: lib example.o
 	$(CC) example.o -o example -lcrypto -lpthread libchord.a $(CCFLAGS) $(WFLAGS)
@@ -13,6 +13,9 @@ chord: chord.o
 
 lib: chord.o
 	ar rcs libchord.a chord.o
+
+small: clean
+	@$(MAKE) CCFLAGS="-Os -m32" all
 
 example.o: example.c
 	$(CC) -c example.c -lpthread $(CCFLAGS) $(WFLAGS)
