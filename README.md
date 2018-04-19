@@ -33,6 +33,9 @@ test args:
   --nodes | -n n: spawn n nodes
 
 make autotest
+
+You can also run the testsuite in interactive mode. This enables you to check the topology, spawn and kill nodes on demand:
+perl testsuite.pl -i
 ```
 
 USAGE:

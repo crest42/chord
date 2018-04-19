@@ -31,5 +31,5 @@ test: clean all
 
 autotest: clean all
 	perl testsuite.pl -n 8 -m 4 -v || exit
-	perl testsuite.pl -n 64 -m 256 || exit
-	perl testsuite.pl -n 8 -k 10 || exit
+	perl testsuite.pl -n 64 -m 256 -v || exit
+	perl testsuite.pl -n 8 -k 10 -v || exit
