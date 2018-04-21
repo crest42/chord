@@ -8,7 +8,10 @@
 #include <sys/types.h>
 #include <unistd.h>
 int
-hash(unsigned char* out, const char* in, size_t in_size, size_t out_size)
+hash(unsigned char* out,
+     const unsigned char* in,
+     size_t in_size,
+     size_t out_size)
 {
   (void)(out_size);
   SHA1((unsigned char*)in, in_size, out);

@@ -1,6 +1,6 @@
 /**
  * @file chord.h
- * @author Robin Lösch
+ * @author Robin LöschDEBUG_ENABLE
  * @date 18 Apr 2018
  * @brief Function and type definitions for the chord protocoll
  *
@@ -110,6 +110,7 @@ typedef int bool;
  */
 enum msg_type
 {
+  MSG_TYPE_CHORD_ERR = -1, /*!< Error return type for failed requests */
   MSG_TYPE_NULL = 0,
   MSG_TYPE_FIND_SUCCESSOR = 1,           /*!< FIND_SUCCESSOR for given id */
   MSG_TYPE_FIND_SUCCESSOR_RESP = 2,      /*!< Response to FIND_SUCCESSOR */
@@ -125,7 +126,8 @@ enum msg_type
   MSG_TYPE_NO_WAIT = 12, /*!< Dummy Type which indicated one-shot */
   MSG_TYPE_COPY_SUCCESSORLIST = 13,      /*!< Request to copy successorlist */
   MSG_TYPE_COPY_SUCCESSORLIST_RESP = 14, /*!< Response which holds suc. list */
-  MSG_TYPE_CHORD_ERR = 15 /*!< Error return type for failed requests */
+  MSG_TYPE_GET = 15,
+  MSG_TYPE_PUT = 16
 };
 typedef enum msg_type chord_msg_t;
 
@@ -156,6 +158,44 @@ struct fingertable_entry
   nodeid_t start;    /*!< Startpoint of the finger. */
   nodeid_t interval; /*!< Size of the Interval. End is start+interval */
   struct node node;  /*!< Pointer to a node who is the successor of end */
+};
+
+typedef int (
+  *chord_callback)(unsigned char*, nodeid_t, int, struct sockaddr*, size_t);
+int
+handle_ping(unsigned char* data,
+            nodeid_t src,
+            int sock,
+            struct sockaddr* src_addr,
+            size_t src_addr_size);
+int
+handle_find_successor(unsigned char* data,
+                      nodeid_t src,
+                      int sock,
+                      struct sockaddr* src_addr,
+                      size_t src_addr_size);
+
+int
+handle_get_predecessor(unsigned char* data,
+                       nodeid_t src,
+                       int sock,
+                       struct sockaddr* src_addr,
+                       size_t src_addr_size);
+
+int
+handle_notify(unsigned char* data,
+              nodeid_t src,
+              int sock,
+              struct sockaddr* src_addr,
+              size_t src_addr_size);
+struct chord_callbacks
+{
+  chord_callback ping_handler;
+  chord_callback find_successor_handler;
+  chord_callback get_predecessor_handler;
+  chord_callback notify_handler;
+  chord_callback put_handler;
+  chord_callback get_handler;
 };
 
 /**
@@ -209,8 +249,12 @@ find_successor(struct node* node, struct node* ret, nodeid_t id);
  * @return CHORD_OK if everything is fine CHORD_ERR otherwise
  */
 int
-hash(unsigned char* out, const char* in, size_t in_size, size_t out_size);
-
+hash(unsigned char* out,
+     const unsigned char* in,
+     size_t in_size,
+     size_t out_size);
+int
+get_mod_of_hash(unsigned char* hash, int modulo);
 /**
  * \brief Init the libary
  *
@@ -230,8 +274,8 @@ init_chord(const char* node_addr);
  *
  * This functions add a node to our Chord ring
  *
- * @param node The node to add. If node is NULL we set up a new Ring. Otherwise
- * we try to join to the node provided
+ * @param node The node to add. If node is NULL we set up a new Ring.
+ * Otherwise we try to join to the node provided
  *
  * @return CHORD_OK if everything is fine CHORD_ERR otherwise
  */

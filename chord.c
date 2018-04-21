@@ -246,7 +246,7 @@ init_chord(const char* node_addr)
   }
   unsigned char hash_id[HASH_DIGEST_SIZE];
   hash(hash_id,
-       (char*)&(mynode.addr.sin6_addr),
+       (unsigned char*)&(mynode.addr.sin6_addr),
        sizeof(mynode.addr.sin6_addr),
        HASH_DIGEST_SIZE);
   mynode.id = get_mod_of_hash(hash_id, CHORD_RING_SIZE);
@@ -704,6 +704,111 @@ is_pre(nodeid_t id)
   return false;
 }
 
+int
+handle_ping(unsigned char* data,
+            nodeid_t src,
+            int sock,
+            struct sockaddr* src_addr,
+            size_t src_addr_size)
+{
+  (void)data;
+  unsigned char msg[CHORD_HEADER_SIZE + sizeof(nodeid_t)];
+  marshall_msg(MSG_TYPE_PONG, src, sizeof(nodeid_t), (char*)&(mynode.id), msg);
+  int ret = chord_send_nonblock_sock(
+    sock, msg, CHORD_HEADER_SIZE + sizeof(nodeid_t), src_addr, src_addr_size);
+  return ret;
+}
+
+int
+handle_find_successor(unsigned char* data,
+                      nodeid_t src,
+                      int sock,
+                      struct sockaddr* src_addr,
+                      size_t src_addr_size)
+{
+  nodeid_t req_id;
+  chord_msg_t type = MSG_TYPE_NULL;
+  memcpy(&req_id, (nodeid_t*)data, sizeof(req_id));
+  DEBUG(INFO, "req_id is %d my_id is %d from %d\n", req_id, mynode.id, src);
+  struct node* successor = NULL;
+  if (!node_is_null(mynode.predecessor) &&
+      in_interval(mynode.predecessor, &mynode, req_id)) {
+    type = MSG_TYPE_FIND_SUCCESSOR_RESP;
+    successor = &mynode;
+  } else if (!node_is_null(mynode.successor) &&
+             in_interval(&mynode, mynode.successor, req_id)) {
+    type = MSG_TYPE_FIND_SUCCESSOR_RESP;
+    successor = mynode.successor;
+  } else {
+    type = MSG_TYPE_FIND_SUCCESSOR_RESP_NEXT;
+    successor = find_successor_in_fingertable(req_id);
+    if (!successor && !node_is_null(mynode.successor)) {
+      DEBUG(INFO, "no pre use original pre %p\n", mynode.successor);
+      successor = mynode.successor;
+    }
+  }
+  assert(successor);
+  unsigned char msg[CHORD_HEADER_SIZE + sizeof(struct node)];
+  marshall_msg(type, src, sizeof(struct node), (char*)successor, msg);
+  int ret = chord_send_nonblock_sock(sock,
+                                     msg,
+                                     CHORD_HEADER_SIZE + sizeof(struct node),
+                                     src_addr,
+                                     src_addr_size);
+  return ret;
+}
+
+int
+handle_get_predecessor(unsigned char* data,
+                       nodeid_t src,
+                       int sock,
+                       struct sockaddr* src_addr,
+                       size_t src_addr_size)
+{
+  (void)data;
+  unsigned char msg[CHORD_HEADER_SIZE + sizeof(struct node)];
+  chord_msg_t type;
+  size_t size = 0;
+  if (!node_is_null(mynode.predecessor)) {
+    type = MSG_TYPE_GET_PREDECESSOR_RESP;
+    size = sizeof(struct node);
+  } else {
+    type = MSG_TYPE_GET_PREDECESSOR_RESP_NULL;
+  }
+  marshall_msg(type, src, size, (char*)mynode.predecessor, msg);
+  return chord_send_nonblock_sock(
+    sock, msg, (CHORD_HEADER_SIZE + size), src_addr, src_addr_size);
+}
+
+int
+handle_notify(unsigned char* data,
+              nodeid_t src,
+              int sock,
+              struct sockaddr* src_addr,
+              size_t src_addr_size)
+{
+  (void)src;
+  (void)sock;
+  (void)src_addr;
+  (void)src_addr_size;
+  struct node n;
+  memcpy(&n, data, sizeof(struct node));
+  DEBUG(INFO, "get notify from %d curr is: %d\n", n.id, mynode.predecessor->id);
+  if (is_pre(n.id)) {
+    if (!node_is_null(mynode.predecessor)) {
+      DEBUG(INFO,
+            "got notify update pre old %d new %d\n",
+            mynode.predecessor->id,
+            n.id);
+    } else {
+      DEBUG(INFO, "got notify update pre old nil new %d\n", n.id);
+    }
+    copy_node(&n, mynode.predecessor);
+    assert(mynode.predecessor && n.id == mynode.predecessor->id);
+  }
+  return CHORD_OK;
+}
+
 static int
 generic_wait(struct node* node, unsigned char* retbuf, size_t bufsize)
 {
@@ -736,125 +841,55 @@ generic_wait(struct node* node, unsigned char* retbuf, size_t bufsize)
         (int)size,
         src_id,
         dst_id);
-  if (size > 0) {
-    if (bufsize > 0) {
-      if (size < bufsize) {
-        bufsize = size;
-      }
-      memcpy(retbuf, content, bufsize);
+  if (size > 0 && bufsize > 0) {
+    if (size < bufsize) {
+      bufsize = size;
     }
+    memcpy(retbuf, content, bufsize);
   }
   switch (type) {
-    case MSG_TYPE_FIND_SUCCESSOR: {
-      nodeid_t req_id;
-      chord_msg_t type = MSG_TYPE_NULL;
-      memcpy(&req_id, (nodeid_t*)content, sizeof(req_id));
-      DEBUG(
-        INFO, "req_id is %d my_id is %d from %d\n", req_id, mynode.id, src_id);
-      struct node* successor = NULL;
-      if (!node_is_null(mynode.predecessor) &&
-          in_interval(mynode.predecessor, &mynode, req_id)) {
-        type = MSG_TYPE_FIND_SUCCESSOR_RESP;
-        successor = &mynode;
-      } else if (!node_is_null(mynode.successor) &&
-                 in_interval(&mynode, mynode.successor, req_id)) {
-        type = MSG_TYPE_FIND_SUCCESSOR_RESP;
-        successor = mynode.successor;
-      } else {
-        type = MSG_TYPE_FIND_SUCCESSOR_RESP_NEXT;
-        successor = find_successor_in_fingertable(req_id);
-        if (!successor && !node_is_null(mynode.successor)) {
-          DEBUG(INFO, "no pre use original pre %p\n", mynode.successor);
-          successor = mynode.successor;
-        }
-      }
-      assert(successor);
-      unsigned char msg[CHORD_HEADER_SIZE + sizeof(struct node)];
-      marshall_msg(type, src_id, sizeof(struct node), (char*)successor, msg);
-      int ret =
-        chord_send_nonblock_sock(node->socket,
-                                 msg,
-                                 CHORD_HEADER_SIZE + sizeof(struct node),
-                                 (struct sockaddr*)&src_addr,
-                                 src_addr_len);
-      if (ret == -1) {
+    case MSG_TYPE_FIND_SUCCESSOR:
+      ret = cc.find_successor_handler(content,
+                                      src_id,
+                                      node->socket,
+                                      (struct sockaddr*)&src_addr,
+                                      src_addr_len);
+      if (ret == CHORD_ERR) {
         DEBUG(ERROR,
               "Error while sending MSG_TYPE_FIND_SUCCESSOR_RESP nonblocking");
-        DEBUG(ERROR, "");
       }
       break;
-    }
-    case MSG_TYPE_PING: {
-      unsigned char msg[CHORD_HEADER_SIZE + sizeof(nodeid_t)];
-      marshall_msg(
-        MSG_TYPE_PONG, src_id, sizeof(nodeid_t), (char*)&(mynode.id), msg);
-      int ret = chord_send_nonblock_sock(node->socket,
-                                         msg,
-                                         CHORD_HEADER_SIZE + sizeof(nodeid_t),
-                                         (struct sockaddr*)&src_addr,
-                                         src_addr_len);
+    case MSG_TYPE_PING:
+      ret = cc.ping_handler(content,
+                            src_id,
+                            node->socket,
+                            (struct sockaddr*)&src_addr,
+                            src_addr_len);
       if (ret == CHORD_ERR) {
         DEBUG(ERROR, "Error in send PONG\n");
       }
       break;
-    }
-    case MSG_TYPE_GET_PREDECESSOR: {
-      if (!node_is_null(mynode.predecessor)) {
-        unsigned char msg[CHORD_HEADER_SIZE + sizeof(struct node)];
-        memset(msg, 0, CHORD_HEADER_SIZE + sizeof(struct node));
-        marshall_msg(MSG_TYPE_GET_PREDECESSOR_RESP,
-                     src_id,
-                     sizeof(struct node),
-                     (char*)mynode.predecessor,
-                     msg);
-        int ret =
-          chord_send_nonblock_sock(node->socket,
-                                   msg,
-                                   CHORD_HEADER_SIZE + sizeof(struct node),
-                                   (struct sockaddr*)&src_addr,
-                                   src_addr_len);
-        if (ret == -1) {
-          DEBUG(ERROR,
-                "Error while sending MSG_TYPE_FIND_SUCCESSOR_RESP_NEXT "
-                "nonblocking");
-          DEBUG(ERROR, "");
-        }
-      } else {
-        unsigned char msg[CHORD_HEADER_SIZE];
-        marshall_msg(MSG_TYPE_GET_PREDECESSOR_RESP_NULL, src_id, 0, NULL, msg);
-        int ret = chord_send_nonblock_sock(node->socket,
-                                           msg,
-                                           CHORD_HEADER_SIZE,
-                                           (struct sockaddr*)&src_addr,
-                                           src_addr_len);
-        if (ret == -1) {
-          DEBUG(ERROR,
-                "Error while sending MSG_TYPE_FIND_SUCCESSOR_RESP_NEXT "
-                "nonblocking");
-          DEBUG(ERROR, "");
-        }
+    case MSG_TYPE_GET_PREDECESSOR:
+
+      ret = cc.get_predecessor_handler(content,
+                                       src_id,
+                                       node->socket,
+                                       (struct sockaddr*)&src_addr,
+                                       src_addr_len);
+      if (ret == CHORD_ERR) {
+        DEBUG(ERROR,
+              "Error while sending MSG_TYPE_FIND_SUCCESSOR_RESP_NEXT "
+              "nonblocking");
       }
       break;
-    }
-    case MSG_TYPE_NOTIFY: {
-      struct node n;
-      memcpy(&n, content, sizeof(struct node));
-      DEBUG(
-        INFO, "get notify from %d curr is: %d\n", n.id, mynode.predecessor->id);
-      if (is_pre(n.id)) {
-        if (!node_is_null(mynode.predecessor)) {
-          DEBUG(INFO,
-                "got notify update pre old %d new %d\n",
-                mynode.predecessor->id,
-                n.id);
-        } else {
-          DEBUG(INFO, "got notify update pre old nil new %d\n", n.id);
-        }
-        copy_node(&n, mynode.predecessor);
-        assert(mynode.predecessor && n.id == mynode.predecessor->id);
-      }
+
+    case MSG_TYPE_NOTIFY:
+      cc.notify_handler(content,
+                        src_id,
+                        node->socket,
+                        (struct sockaddr*)&src_addr,
+                        src_addr_len);
       break;
-    }
     case MSG_TYPE_COPY_SUCCESSORLIST: {
       unsigned char msg[CHORD_HEADER_SIZE + sizeof(successorlist)];
       marshall_msg(MSG_TYPE_COPY_SUCCESSORLIST_RESP,
@@ -862,13 +897,12 @@ generic_wait(struct node* node, unsigned char* retbuf, size_t bufsize)
                    sizeof(successorlist),
                    (char*)successorlist,
                    msg);
-      int ret =
-        chord_send_nonblock_sock(node->socket,
-                                 msg,
-                                 CHORD_HEADER_SIZE + sizeof(successorlist),
-                                 (struct sockaddr*)&src_addr,
-                                 src_addr_len);
-      if (ret == -1) {
+      ret = chord_send_nonblock_sock(node->socket,
+                                     msg,
+                                     CHORD_HEADER_SIZE + sizeof(successorlist),
+                                     (struct sockaddr*)&src_addr,
+                                     src_addr_len);
+      if (ret == CHORD_ERR) {
         DEBUG(ERROR,
               "Error while sending MSG_TYPE_FIND_SUCCESSOR_RESP_NEXT "
               "nonblocking");
@@ -876,6 +910,24 @@ generic_wait(struct node* node, unsigned char* retbuf, size_t bufsize)
       }
       break;
     }
+    case MSG_TYPE_PUT:
+      if (cc.put_handler) {
+        cc.put_handler(content,
+                       src_id,
+                       node->socket,
+                       (struct sockaddr*)&src_addr,
+                       src_addr_len);
+      }
+      break;
+    case MSG_TYPE_GET:
+      if (cc.get_handler) {
+        cc.get_handler(content,
+                       src_id,
+                       node->socket,
+                       (struct sockaddr*)&src_addr,
+                       src_addr_len);
+      }
+      break;
     default:
       break;
   }
@@ -949,7 +1001,7 @@ create_node(char* address, struct node* node)
 
   unsigned char hash_id[HASH_DIGEST_SIZE];
   hash(hash_id,
-       (char*)&node->addr.sin6_addr,
+       (unsigned char*)&node->addr.sin6_addr,
        sizeof(node->addr.sin6_addr),
        sizeof(hash_id));
   node->id = get_mod_of_hash(hash_id, CHORD_RING_SIZE);
