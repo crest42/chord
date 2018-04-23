@@ -12,8 +12,6 @@
 #include "chord.h"
 #include "chord_internal.h"
 #include <assert.h>
-#include <errno.h>
-#include <sys/time.h>
 #include <unistd.h>
 
 static int

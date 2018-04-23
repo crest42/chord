@@ -12,7 +12,6 @@
 #include <arpa/inet.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/types.h>
 
 enum log_level
 {
@@ -58,7 +57,6 @@ typedef int bool;
 #define _getpid() thread_getpid()
 #else
 #include <sys/syscall.h>
-#include <sys/types.h>
 #define _getpid() (int)syscall(__NR_gettid)
 #endif
 
