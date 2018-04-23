@@ -6,6 +6,9 @@ This is just another implementation of the protocol described in the following g
 - http://nms.csail.mit.edu/papers/chord.pdf
 - https://pdos.csail.mit.edu/papers/ton:chord/paper-ton.pdf
 
+For Testing and example see:
+https://github.com/crest42/chord-testsuite
+
 TODO:
 
 - cleanup
