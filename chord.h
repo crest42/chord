@@ -127,7 +127,9 @@ enum msg_type
   MSG_TYPE_COPY_SUCCESSORLIST = 13,      /*!< Request to copy successorlist */
   MSG_TYPE_COPY_SUCCESSORLIST_RESP = 14, /*!< Response which holds suc. list */
   MSG_TYPE_GET = 15,
-  MSG_TYPE_PUT = 16
+  MSG_TYPE_PUT = 16,
+  MSG_TYPE_PUT_ACK = 17,
+  MSG_TYPE_GET_RESP = 18
 };
 typedef enum msg_type chord_msg_t;
 
@@ -145,6 +147,17 @@ struct node
   struct sockaddr_in6 addr;
   struct node* successor;   /*!< Pointer to our successor node. */
   struct node* predecessor; /*!< Pointer to our predecessor node */
+};
+
+struct key
+{
+  nodeid_t id; /*!< Id of the key. The node id is the hashed ipv6 address of
+                  the node modulo the ring size */
+  nodeid_t owner;
+  size_t size;
+  unsigned char hash[20];
+  unsigned char* data;
+  struct key* next;
 };
 
 /**
@@ -197,6 +210,33 @@ struct chord_callbacks
   chord_callback put_handler;
   chord_callback get_handler;
 };
+
+struct chord_callbacks*
+get_callbacks(void);
+struct key**
+get_first_key(void);
+
+int
+demarshall_msg(unsigned char* buf,
+               chord_msg_t* type,
+               nodeid_t* src_id,
+               nodeid_t* dst_id,
+               size_t* size,
+               unsigned char** content);
+int
+marshall_msg(chord_msg_t msg_type,
+             nodeid_t dst_id,
+             size_t size,
+             unsigned char* content,
+             unsigned char* msg);
+
+int
+chord_send_block_and_wait(struct node* target,
+                          unsigned char* msg,
+                          size_t size,
+                          chord_msg_t wait,
+                          unsigned char* buf,
+                          size_t bufsize);
 
 /**
  * \brief Set up a node struct from a given address
@@ -347,5 +387,12 @@ debug_print_node(struct node* node, bool verbose);
  */
 bool
 node_is_null(struct node* node);
+
+int
+chord_send_nonblock_sock(int sock,
+                         unsigned char* msg,
+                         size_t size,
+                         struct sockaddr* addr,
+                         socklen_t addr_len);
 
 #endif

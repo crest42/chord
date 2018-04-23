@@ -1,6 +1,6 @@
 PHONY = all example lib test fulltest
 .DEFAULT_GOAL := all
-WFLAGS := -Wall -Wextra
+WFLAGS := -Wall -Wextra -Werror
 all: example
 
 debug: clean
@@ -18,7 +18,7 @@ small: clean
 	@$(MAKE) CCFLAGS="-Os -m32" all
 
 example.o: example.c
-	$(CC) -c example.c -lpthread $(CCFLAGS) $(WFLAGS)
+	$(CC) -c example.c -lpthread  $(CCFLAGS) $(WFLAGS)
 
 chord.o: chord.c chord.h
 	$(CC) -c chord.c $(CCFLAGS) $(WFLAGS)

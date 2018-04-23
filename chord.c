@@ -73,6 +73,14 @@ msg_to_string(chord_msg_t msg)
       return "MSG_TYPE_COPY_SUCCESSORLIST";
     case MSG_TYPE_COPY_SUCCESSORLIST_RESP:
       return "MSG_TYPE_COPY_SUCCESSORLIST_RESP";
+    case MSG_TYPE_GET:
+      return "MSG_TYPE_GET";
+    case MSG_TYPE_GET_RESP:
+      return "MSG_TYPE_GET_RESP";
+    case MSG_TYPE_PUT:
+      return "MSG_TYPE_PUT";
+    case MSG_TYPE_PUT_ACK:
+      return "MSG_TYPE_PUT_ACK";
     default:
       return "UNKNOWN";
   }
@@ -152,6 +160,29 @@ debug_print_successorlist(void)
   }
 }
 
+static void
+debug_print_keys(void)
+{
+  struct key** first_key = get_first_key();
+  if (*first_key == NULL) {
+    printf("no keys yet\n");
+    return;
+  }
+  int i = 0;
+  printf("keylist of %d:\n", mynode.id);
+
+  for (struct key* start = *first_key; start != NULL; start = start->next) {
+    printf("Key %d: size: %lu id: %d owner: %d next: %p\n",
+           i,
+           start->size,
+           start->id,
+           start->owner,
+           start->next);
+    i++;
+  }
+  return;
+}
+
 void
 debug_print_node(struct node* node, bool verbose)
 {
@@ -170,6 +201,7 @@ debug_print_node(struct node* node, bool verbose)
   if (verbose) {
     debug_print_fingertable();
     debug_print_successorlist();
+    debug_print_keys();
   }
 }
 #endif
@@ -255,6 +287,8 @@ init_chord(const char* node_addr)
   mynode.successor = &fingertable[0].node;
   init_fingertable();
   srand(mynode.id);
+  first_key = NULL;
+  last_key = NULL;
   if (bind_socket(&mynode) == CHORD_ERR) {
     return CHORD_ERR;
   }
@@ -311,7 +345,7 @@ copy_node(struct node* node, struct node* copy)
   return CHORD_OK;
 }
 
-static int
+int
 chord_send_nonblock_sock(int sock,
                          unsigned char* msg,
                          size_t size,
@@ -321,11 +355,11 @@ chord_send_nonblock_sock(int sock,
   return sendto(sock, msg, size, 0, addr, addr_len);
 }
 
-static int
+int
 marshall_msg(chord_msg_t msg_type,
              nodeid_t dst_id,
              size_t size,
-             char* content,
+             unsigned char* content,
              unsigned char* msg)
 {
   memset(msg, 0, size);
@@ -348,8 +382,7 @@ marshall_msg(chord_msg_t msg_type,
   return CHORD_OK;
 }
 
-// TODO: Cleanup
-static int
+int
 demarshall_msg(unsigned char* buf,
                chord_msg_t* type,
                nodeid_t* src_id,
@@ -378,7 +411,7 @@ demarshall_msg(unsigned char* buf,
   return CHORD_OK;
 }
 
-static int
+int
 chord_send_block_and_wait(struct node* target,
                           unsigned char* msg,
                           size_t size,
@@ -422,8 +455,10 @@ chord_send_block_and_wait(struct node* target,
     close(s);
     return MSG_TYPE_CHORD_ERR;
   }
-  DEBUG(
-    INFO, "connect to port %d (id %d)\n", ntohs(tmpaddr.sin6_port), target->id);
+  DEBUG(DEBUG,
+        "connect to port %d (id %d)\n",
+        ntohs(tmpaddr.sin6_port),
+        target->id);
   if (connect(s, (struct sockaddr*)&tmpaddr, sizeof(struct sockaddr_in6)) ==
       -1) {
     close(s);
@@ -450,7 +485,7 @@ chord_send_block_and_wait(struct node* target,
     return MSG_TYPE_NO_WAIT;
   }
   chord_msg_t type = 0;
-  DEBUG(INFO, "Wait for answer\n");
+  DEBUG(DEBUG, "Wait for answer\n");
   while (true) {
     ret = recv(s, read_buf, MAX_MSG_SIZE, 0);
     if (ret < (int)CHORD_HEADER_SIZE) {
@@ -537,7 +572,7 @@ find_successor(struct node* target, struct node* ret, nodeid_t id)
     marshall_msg(MSG_TYPE_FIND_SUCCESSOR,
                  target->id,
                  sizeof(struct node),
-                 (char*)&id,
+                 (unsigned char*)&id,
                  msg);
     chord_msg_t type =
       chord_send_block_and_wait(target,
@@ -583,8 +618,11 @@ notify(struct node* target)
   }
   DEBUG(INFO, "Notify successor %d\n", target->id);
   unsigned char msg[CHORD_HEADER_SIZE + sizeof(struct node)];
-  marshall_msg(
-    MSG_TYPE_NOTIFY, target->id, sizeof(struct node), (char*)(&mynode), msg);
+  marshall_msg(MSG_TYPE_NOTIFY,
+               target->id,
+               sizeof(struct node),
+               (unsigned char*)(&mynode),
+               msg);
   chord_msg_t type =
     chord_send_block_and_wait(target,
                               msg,
@@ -626,7 +664,7 @@ copy_successorlist(struct node* src)
   marshall_msg(MSG_TYPE_COPY_SUCCESSORLIST,
                src->id,
                sizeof(nodeid_t),
-               (char*)(&(mynode.id)),
+               (unsigned char*)(&(mynode.id)),
                msg);
   while (true) {
     chord_msg_t type =
@@ -670,7 +708,7 @@ get_predecessor(struct node* src, struct node* pre)
   marshall_msg(MSG_TYPE_GET_PREDECESSOR,
                src->id,
                sizeof(nodeid_t),
-               (char*)(&(mynode.id)),
+               (unsigned char*)(&(mynode.id)),
                msg);
   while (true) {
     chord_msg_t type =
@@ -704,6 +742,18 @@ is_pre(nodeid_t id)
   return false;
 }
 
+struct chord_callbacks*
+get_callbacks(void)
+{
+  return &cc;
+}
+
+struct key**
+get_first_key(void)
+{
+  return &first_key;
+}
+
 int
 handle_ping(unsigned char* data,
             nodeid_t src,
@@ -713,7 +763,8 @@ handle_ping(unsigned char* data,
 {
   (void)data;
   unsigned char msg[CHORD_HEADER_SIZE + sizeof(nodeid_t)];
-  marshall_msg(MSG_TYPE_PONG, src, sizeof(nodeid_t), (char*)&(mynode.id), msg);
+  marshall_msg(
+    MSG_TYPE_PONG, src, sizeof(nodeid_t), (unsigned char*)&(mynode.id), msg);
   int ret = chord_send_nonblock_sock(
     sock, msg, CHORD_HEADER_SIZE + sizeof(nodeid_t), src_addr, src_addr_size);
   return ret;
@@ -729,7 +780,7 @@ handle_find_successor(unsigned char* data,
   nodeid_t req_id;
   chord_msg_t type = MSG_TYPE_NULL;
   memcpy(&req_id, (nodeid_t*)data, sizeof(req_id));
-  DEBUG(INFO, "req_id is %d my_id is %d from %d\n", req_id, mynode.id, src);
+  DEBUG(DEBUG, "req_id is %d my_id is %d from %d\n", req_id, mynode.id, src);
   struct node* successor = NULL;
   if (!node_is_null(mynode.predecessor) &&
       in_interval(mynode.predecessor, &mynode, req_id)) {
@@ -749,7 +800,7 @@ handle_find_successor(unsigned char* data,
   }
   assert(successor);
   unsigned char msg[CHORD_HEADER_SIZE + sizeof(struct node)];
-  marshall_msg(type, src, sizeof(struct node), (char*)successor, msg);
+  marshall_msg(type, src, sizeof(struct node), (unsigned char*)successor, msg);
   int ret = chord_send_nonblock_sock(sock,
                                      msg,
                                      CHORD_HEADER_SIZE + sizeof(struct node),
@@ -775,7 +826,7 @@ handle_get_predecessor(unsigned char* data,
   } else {
     type = MSG_TYPE_GET_PREDECESSOR_RESP_NULL;
   }
-  marshall_msg(type, src, size, (char*)mynode.predecessor, msg);
+  marshall_msg(type, src, size, (unsigned char*)mynode.predecessor, msg);
   return chord_send_nonblock_sock(
     sock, msg, (CHORD_HEADER_SIZE + size), src_addr, src_addr_size);
 }
@@ -835,7 +886,7 @@ generic_wait(struct node* node, unsigned char* retbuf, size_t bufsize)
     return CHORD_ERR;
   }
   demarshall_msg(buf, &type, &src_id, &dst_id, &size, &content);
-  DEBUG(DEBUG,
+  DEBUG(INFO,
         "Got %s Request with size %d from %d to %d\n",
         msg_to_string(type),
         (int)size,
@@ -895,7 +946,7 @@ generic_wait(struct node* node, unsigned char* retbuf, size_t bufsize)
       marshall_msg(MSG_TYPE_COPY_SUCCESSORLIST_RESP,
                    src_id,
                    sizeof(successorlist),
-                   (char*)successorlist,
+                   (unsigned char*)successorlist,
                    msg);
       ret = chord_send_nonblock_sock(node->socket,
                                      msg,
@@ -1088,8 +1139,11 @@ send_ping(struct node* node)
     return false;
   }
   unsigned char msg[CHORD_HEADER_SIZE + sizeof(nodeid_t)];
-  marshall_msg(
-    MSG_TYPE_PING, node->id, sizeof(nodeid_t), (char*)(&(mynode.id)), msg);
+  marshall_msg(MSG_TYPE_PING,
+               node->id,
+               sizeof(nodeid_t),
+               (unsigned char*)(&(mynode.id)),
+               msg);
   nodeid_t retid = -1;
   chord_msg_t type =
     chord_send_block_and_wait(node,

@@ -45,4 +45,7 @@ struct chord_callbacks cc = { .ping_handler = handle_ping,
                               .notify_handler = handle_notify,
                               .get_handler = NULL,
                               .put_handler = NULL };
+
+struct key* first_key;
+struct key* last_key;
 #endif

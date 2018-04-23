@@ -13,6 +13,7 @@ This Version is far from perfect and there is a lot of work to do. Its not exact
 TODO:
 
 - cleanup
+- mutex or better solution for send and wait for message. Problem: If - for example - a put message is sent and the periodic thread send a whatever msg then we should have a race cond.
 
 BUILD:
 
