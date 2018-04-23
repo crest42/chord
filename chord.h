@@ -28,14 +28,17 @@ enum log_level
 
 /** Defines if DEBUG Function and macros should be enabled. */
 #ifdef DEBUG_ENABLE
-
+void
+debug_printf(unsigned long t,
+             const char* fname,
+             enum log_level level,
+             const char* format,
+             ...);
 /**Maximum function name which gets printed by debug_print.*/
-#define DEBUG_MAX_FUNC_NAME 20
 
 #include <stdarg.h>
 #include <stdio.h>
 #include <time.h>
-FILE* default_out;
 #ifdef RIOT
 #include "thread.h"
 #define __FUNCTION__ ""
@@ -257,6 +260,22 @@ create_node(char* address, struct node* node);
  */
 struct node*
 get_own_node(void);
+
+/**
+ * \brief Returns fingertable
+ *
+ * @return fingertable_entry pointer to first fingertable entry
+ */
+struct fingertable_entry*
+get_fingertable(void);
+
+/**
+ * \brief Returns successorlist
+ *
+ * @return Return pointer to first successorlist entry
+ */
+struct node*
+get_successorlist(void);
 
 /**
  * \brief Finds and returns the successor of a given Chord ring

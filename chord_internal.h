@@ -12,6 +12,18 @@ get_own_node(void)
   return &mynode;
 }
 
+struct fingertable_entry*
+get_fingertable(void)
+{
+  return fingertable;
+}
+
+struct node*
+get_successorlist(void)
+{
+  return successorlist;
+}
+
 // euclidean mod because -1 % n should be n-1 not 1
 static int
 mod(int a, int b)
