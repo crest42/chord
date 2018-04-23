@@ -69,9 +69,6 @@ get_mod_of_hash(unsigned char* hash, int modulo)
 int
 init_chord(const char* node_addr)
 {
-#ifdef DEBUG_ENABLE
-  default_out = stdout;
-#endif
   memset(&mynode, 0, sizeof(mynode));
   memset(&predecessor, 0, sizeof(predecessor));
   memset(successorlist, 0, sizeof(successorlist));

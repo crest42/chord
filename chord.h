@@ -1,6 +1,6 @@
 /**
  * @file chord.h
- * @author Robin LöschDEBUG_ENABLE
+ * @author Robin Lösch
  * @date 18 Apr 2018
  * @brief Function and type definitions for the chord protocoll
  *
@@ -28,24 +28,16 @@ enum log_level
 
 /** Defines if DEBUG Function and macros should be enabled. */
 #ifdef DEBUG_ENABLE
+#include <stdio.h>
+#include <time.h>
 void
 debug_printf(unsigned long t,
              const char* fname,
              enum log_level level,
              const char* format,
              ...);
-/**Maximum function name which gets printed by debug_print.*/
-
-#include <stdarg.h>
-#include <stdio.h>
-#include <time.h>
-#ifdef RIOT
-#include "thread.h"
-#define __FUNCTION__ ""
-#endif
-#ifndef DEBUG_LEVEL
-#define DEBUG_LEVEL INFO
-#endif
+char*
+msg_to_string(int msg);
 #define DEBUG(level, ...)                                                      \
   debug_printf((unsigned long)time(NULL), __FUNCTION__, level, __VA_ARGS__)
 #else
@@ -74,13 +66,7 @@ typedef int bool;
  * the digest size oh sha1.
  */
 #define HASH_DIGEST_SIZE 20
-
-#ifdef CHORD_DEV
-#define CHORD_RING_BITS (8)
-#endif
-#ifndef CHORD_RING_BITS
 #define CHORD_RING_BITS (16)
-#endif
 #define FINGERTABLE_SIZE CHORD_RING_BITS
 #define SUCCESSORLIST_SIZE CHORD_RING_BITS
 #define CHORD_PORT (6667)
