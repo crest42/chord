@@ -27,8 +27,10 @@ enum log_level
 
 /** Defines if DEBUG Function and macros should be enabled. */
 #ifdef DEBUG_ENABLE
+#include <errno.h>
 #include <stdio.h>
 #include <time.h>
+
 void
 debug_printf(unsigned long t,
              const char* fname,
@@ -70,9 +72,10 @@ typedef int bool;
 #define CHORD_PORT (6667)
 #define CHORD_OK (0)
 #define CHORD_ERR (-1)
-#define CHORD_PERIODIC_SLEEP (1)
+#define CHORD_PERIODIC_SLEEP (2)
 #define CHORD_RING_SIZE (1 << CHORD_RING_BITS)
-
+#define CHORD_CHANGE_ID (1)
+#define CHORD_CHANGE_INTERVAL (5)
 #define CHORD_MSG_COMMAND_SLOT (0)
 #define CHORD_MSG_COMMAND_SIZE (sizeof(chord_msg_t))
 #define CHORD_MSG_SRC_ID_SIZE (sizeof(nodeid_t))
@@ -86,7 +89,7 @@ typedef int bool;
    CHORD_MSG_SRC_ID_SIZE)
 #define CHORD_MSG_MAX_CONTENT_SIZE (MAX_MSG_SIZE - CHORD_HEADER_SIZE)
 
-#define MAX_MSG_SIZE 512
+#define MAX_MSG_SIZE 1024
 
 /**
  * \brief Possible Message Types
@@ -113,10 +116,13 @@ enum msg_type
   MSG_TYPE_NO_WAIT = 12, /*!< Dummy Type which indicated one-shot */
   MSG_TYPE_COPY_SUCCESSORLIST = 13,      /*!< Request to copy successorlist */
   MSG_TYPE_COPY_SUCCESSORLIST_RESP = 14, /*!< Response which holds suc. list */
-  MSG_TYPE_GET = 15,
-  MSG_TYPE_PUT = 16,
-  MSG_TYPE_PUT_ACK = 17,
-  MSG_TYPE_GET_RESP = 18
+  MSG_TYPE_EXIT = 15,
+  MSG_TYPE_EXIT_ACK = 16,
+  MSG_TYPE_GET = 17,
+  MSG_TYPE_PUT = 18,
+  MSG_TYPE_PUT_ACK = 19,
+  MSG_TYPE_GET_RESP = 20,
+  MSG_TYPE_FIND_SUCCESSOR_LINEAR = 21,
 };
 typedef enum msg_type chord_msg_t;
 
@@ -160,30 +166,46 @@ struct fingertable_entry
   struct node node;  /*!< Pointer to a node who is the successor of end */
 };
 
-typedef int (
-  *chord_callback)(unsigned char*, nodeid_t, int, struct sockaddr*, size_t);
+typedef int (*chord_callback)(chord_msg_t,
+                              unsigned char*,
+                              nodeid_t,
+                              int,
+                              struct sockaddr*,
+                              size_t);
 int
-handle_ping(unsigned char* data,
+handle_ping(chord_msg_t type,
+            unsigned char* data,
+            nodeid_t src,
+            int sock,
+            struct sockaddr* src_addr,
+            size_t src_addr_size);
+
+int
+handle_exit(chord_msg_t type,
+            unsigned char* data,
             nodeid_t src,
             int sock,
             struct sockaddr* src_addr,
             size_t src_addr_size);
 int
-handle_find_successor(unsigned char* data,
+handle_find_successor(chord_msg_t type,
+                      unsigned char* data,
                       nodeid_t src,
                       int sock,
                       struct sockaddr* src_addr,
                       size_t src_addr_size);
 
 int
-handle_get_predecessor(unsigned char* data,
+handle_get_predecessor(chord_msg_t type,
+                       unsigned char* data,
                        nodeid_t src,
                        int sock,
                        struct sockaddr* src_addr,
                        size_t src_addr_size);
 
 int
-handle_notify(unsigned char* data,
+handle_notify(chord_msg_t type,
+              unsigned char* data,
               nodeid_t src,
               int sock,
               struct sockaddr* src_addr,
@@ -191,6 +213,7 @@ handle_notify(unsigned char* data,
 struct chord_callbacks
 {
   chord_callback ping_handler;
+  chord_callback exit_handler;
   chord_callback find_successor_handler;
   chord_callback get_predecessor_handler;
   chord_callback notify_handler;
