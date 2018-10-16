@@ -11,7 +11,9 @@
 #define _LIBCHORD_H
 #include <arpa/inet.h>
 #include <stdlib.h>
+#include <assert.h>
 #include <string.h>
+#include <unistd.h>
 
 enum log_level
 {
@@ -135,8 +137,9 @@ struct node
 {
   nodeid_t id; /*!< Id of the node. The node id is the hashed ipv6 address of
                   the node modulo the ring size */
-  int socket;  /*!< A Socket fd to the node or where we listen for incomming
-                  messages. */
+  nodeid_t bin;
+  int socket; /*!< A Socket fd to the node or where we listen for incomming
+                 messages. */
   struct sockaddr_in6 addr;
   struct node* successor;   /*!< Pointer to our successor node. */
   struct node* predecessor; /*!< Pointer to our predecessor node */
@@ -225,20 +228,6 @@ struct chord_callbacks*
 get_callbacks(void);
 struct key**
 get_first_key(void);
-
-int
-demarshall_msg(unsigned char* buf,
-               chord_msg_t* type,
-               nodeid_t* src_id,
-               nodeid_t* dst_id,
-               size_t* size,
-               unsigned char** content);
-int
-marshall_msg(chord_msg_t msg_type,
-             nodeid_t dst_id,
-             size_t size,
-             unsigned char* content,
-             unsigned char* msg);
 
 int
 chord_send_block_and_wait(struct node* target,
@@ -420,5 +409,15 @@ chord_send_nonblock_sock(int sock,
                          size_t size,
                          struct sockaddr* addr,
                          socklen_t addr_len);
+
+                         int
+remove_dead_node(nodeid_t id);
+
+
+int
+copy_node(struct node* node, struct node* copy);
+
+bool
+in_interval(struct node* first, struct node* second, nodeid_t id);
 
 #endif

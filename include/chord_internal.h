@@ -32,26 +32,6 @@ mod(int a, int b)
   return ((a % b) + b) % b;
 }
 
-static bool
-in_interval_id(int start, int end, int test)
-{
-  return (mod((test - start), CHORD_RING_SIZE) <
-          mod((end - start), CHORD_RING_SIZE));
-}
-
-static bool
-in_interval(struct node* first, struct node* second, nodeid_t id)
-{
-  if (!first || !second) {
-    return false;
-  }
-  // We need this because everything is in between x and x
-  if (first->id == second->id) {
-    return true;
-  }
-  return in_interval_id(first->id, second->id, id);
-}
-
 struct chord_callbacks cc = { .ping_handler = handle_ping,
                               .exit_handler = handle_exit,
                               .find_successor_handler = handle_find_successor,
@@ -59,6 +39,10 @@ struct chord_callbacks cc = { .ping_handler = handle_ping,
                               .notify_handler = handle_notify,
                               .get_handler = NULL,
                               .put_handler = NULL };
+
+struct chord_callbacks *get_callbacks(void) {
+  return &cc;
+}
 
 struct key* first_key;
 struct key* last_key;
