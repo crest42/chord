@@ -1,8 +1,19 @@
 #include "../include/chord.h"
 
 int
-bind_socket(struct node* node)
+bind_socket(struct node* node, const char *addr)
 {
+  int ret = inet_pton(AF_INET6, addr, &(node->addr.sin6_addr));
+  if (ret != 1) {
+    if (ret == -1) {
+      DEBUG(ERROR, "Error in inet_pton");
+    } else if (ret == 0) {
+      DEBUG(ERROR, "Addr is not a valid IPv6 address\n");
+    } else {
+      DEBUG(ERROR, "Unknown error in inet_pton\n");
+    }
+    return CHORD_ERR;
+  }
   node->socket = socket(AF_INET6, SOCK_DGRAM, 0);
   if (node->socket < 0) {
     DEBUG(ERROR, "Error while creating socket");

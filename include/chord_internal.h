@@ -6,7 +6,6 @@ struct node predecessor;
 struct fingertable_entry fingertable[FINGERTABLE_SIZE];
 struct node successorlist[SUCCESSORLIST_SIZE];
 
-nodeid_t pnodes[CHORD_RING_BITS];
 struct node*
 get_own_node(void)
 {

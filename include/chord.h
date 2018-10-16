@@ -322,7 +322,7 @@ get_mod_of_hash(unsigned char* hash, int modulo);
  * @return CHORD_OK if everything is fine CHORD_ERR otherwise
  */
 int
-init_chord(const char* node_addr);
+init_chord(const char* addr);
 
 /**
  * \brief Add a Node to out Chord Ring

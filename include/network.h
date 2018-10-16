@@ -11,7 +11,7 @@
 int
 wait_for_message(struct node* node, unsigned char* retbuf, size_t bufsize);
 int
-bind_socket(struct node* node);
+bind_socket(struct node* node, const char *addr);
 
 int
 demarshall_msg(unsigned char* buf,
