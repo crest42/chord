@@ -128,6 +128,22 @@ enum msg_type
 };
 typedef enum msg_type chord_msg_t;
 
+
+/**
+ * \brief Nodes State for ID Transition
+ *
+ * @see http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.86.7648&rep=rep1&type=pdf
+ */
+enum node_state
+{
+
+  STATE_B = 0,
+  STATE_F = 1,
+  STATE_F_ASTERISK = 3,
+  STATE_A = 4
+};
+typedef enum msg_type node_state_t;
+
 /**
  * \brief A definition of a node
  *
@@ -140,6 +156,7 @@ struct node
   nodeid_t bin;
   int socket; /*!< A Socket fd to the node or where we listen for incomming
                  messages. */
+  node_state_t state;
   struct sockaddr_in6 addr;
   struct node* successor;   /*!< Pointer to our successor node. */
   struct node* predecessor; /*!< Pointer to our predecessor node */

@@ -51,12 +51,6 @@ get_mod_of_hash(unsigned char* hash, int modulo)
   return remainder;
 }
 
-struct key**
-get_first_key(void)
-{
-  return &first_key;
-}
-
 static int
 update_successorlist(struct node* src)
 {
@@ -83,8 +77,20 @@ update_successorlist(struct node* src)
   return CHORD_OK;
 }
 
-static int tree_granularity() {
-  return 0;
+/* base-2 logarithm, rounding down */
+static inline uint32_t lg_down(uint32_t x) {
+  return 31U - __builtin_clzl(x);
+}
+
+/* base-2 logarithm, rounding up */
+static inline uint32_t lg_up(uint32_t x) {
+  return lg_down(x - 1) + 1;
+}
+
+static int tree_granularity(int l) {
+  int c = 1;
+  int x = l - lg_up(l) - c;
+  return (x < 0) ? 0 : x;
 }
 
 /*static int dec_to_str(int dec){
@@ -113,18 +119,18 @@ static int find_splitnode(struct node *target, struct node *ret) {
     }
   }
   int i, set = 0;
-  nodeid_t myid = mynode.id | (1 << (CHORD_RING_BITS - tree_granularity()));
+  nodeid_t myid = mynode.id | (1 << (CHORD_RING_BITS - tree_granularity(CHORD_RING_BITS)));
   for (i = 0; i < CHORD_RING_BITS; i++) {
     nodeid_t id =
-      list[i].id | (1 << (CHORD_RING_BITS - tree_granularity()));
+      list[i].id | (1 << (CHORD_RING_BITS - tree_granularity(CHORD_RING_BITS)));
     nodeid_t mask =
       ((nodeid_t)__INT_MAX__) ^
-      (((nodeid_t)1 << (CHORD_RING_BITS - tree_granularity())) - 1);
+      (((nodeid_t)1 << (CHORD_RING_BITS - tree_granularity(CHORD_RING_BITS))) - 1);
     if ((myid & mask) == (id & mask)) {
       set++;
     }
   }
-  if (i >= (CHORD_RING_BITS - tree_granularity())) {
+  if (i >= (CHORD_RING_BITS - tree_granularity(CHORD_RING_BITS))) {
     return CHORD_OK;
   } else {
     nodeid_t max = 0;
@@ -171,6 +177,7 @@ add_node(struct node* node)
     if (CHORD_CHANGE_ID) {
       mynode.id = CHORD_RING_SIZE;
     }
+    mynode.state = STATE_B;
     copy_node(&mynode, mynode.successor);
     DEBUG(INFO, "Create new chord ring %d\n", mynode.successor->id);
     for (int i = 0; i < FINGERTABLE_SIZE; i++) {
@@ -626,7 +633,7 @@ fix_fingers(struct node* node)
       (node->id != node->successor->id)) {
     DEBUG(INFO,
           "Fix fingers find successor for %d ask: %d\n",
-          f->.start,
+          f->start,
           node->successor->id);
 
     nodeid_t id = ((f->start + f->interval) % CHORD_RING_SIZE);
