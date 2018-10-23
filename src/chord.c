@@ -410,7 +410,6 @@ chord_send_block_and_wait(struct node* target,
   if (msg_size > bufsize) {
     msg_size = bufsize;
   }
-  printf("read %d (%d+%d)\n",(int)msg_size,(int)sizeof(struct node),(int)sizeof(struct aggregate));
   memcpy(buf, msg_content, msg_size);
   close(s);
   return type;
@@ -840,7 +839,6 @@ static int register_child(struct child *c){
                                      (unsigned char*)&ret,
                                      sizeof(ret));
     memcpy(&c->parent_suc, &ret, sizeof(struct node));
-    printf("a\n");
     memcpy(get_stats(), ret + sizeof(struct node), sizeof(struct aggregate));
   } while (type == MSG_TYPE_REGISTER_CHILD_EFULL);
   if (type == MSG_TYPE_REGISTER_CHILD_OK) {
@@ -867,8 +865,6 @@ static int refresh_parent(struct child *c) {
                               (unsigned char*)&ret,
                                      sizeof(ret));
     memcpy(&c->parent_suc, &ret, sizeof(struct node));
-        printf("b\n");
-
     memcpy(get_stats(), (ret)+sizeof(struct node), sizeof(struct aggregate));
   if(type == MSG_TYPE_REFRESH_CHILD_REDIRECT) {
     register_child(c);
