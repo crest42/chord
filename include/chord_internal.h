@@ -5,11 +5,23 @@ struct node mynode;
 struct node predecessor;
 struct fingertable_entry fingertable[FINGERTABLE_SIZE];
 struct node successorlist[SUCCESSORLIST_SIZE];
+struct childs childs;
+struct aggregate stats;
+
+struct aggregate *get_stats(void) {
+  return &stats;
+}
 
 struct node*
 get_own_node(void)
 {
   return &mynode;
+}
+
+struct childs*
+get_childs(void)
+{
+  return &childs;
 }
 
 struct fingertable_entry*
@@ -36,6 +48,8 @@ struct chord_callbacks cc = { .ping_handler = handle_ping,
                               .find_successor_handler = handle_find_successor,
                               .get_predecessor_handler = handle_get_predecessor,
                               .notify_handler = handle_notify,
+                              .register_child_handler = handle_register_child,
+                              .refresh_child_handler = handle_refresh_child,
                               .get_handler = NULL,
                               .put_handler = NULL };
 

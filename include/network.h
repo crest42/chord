@@ -26,4 +26,9 @@ marshall_msg(chord_msg_t msg_type,
              size_t size,
              unsigned char* content,
              unsigned char* msg);
+int
+add_msg_cont(unsigned char* data,
+             unsigned char* to,
+             size_t size,
+             size_t size_existing);
 #endif

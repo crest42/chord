@@ -73,6 +73,110 @@ handle_ping(chord_msg_t type,
 }
 
 int
+handle_refresh_child(chord_msg_t type,
+            unsigned char* data,
+            nodeid_t src,
+            int sock,
+            struct sockaddr* src_addr,
+            size_t src_addr_size)
+{
+  assert(type == MSG_TYPE_REFRESH_CHILD);
+  (void)data;
+  (void)src;
+  (void)sock;
+  (void)src_addr;
+  (void)src_addr_size;
+  struct child* c = (struct child*)data;
+  struct childs *childs = get_childs();
+  struct node *mynode = get_own_node(), *retnode = mynode;
+  struct aggregate *mystats = get_stats();
+  time_t systime = time(NULL);
+  chord_msg_t ret = MSG_TYPE_CHORD_ERR;
+  for (int i = 0; i < CHORD_TREE_CHILDS; i++) {
+    if(childs->child[i].child == c->child) {
+      childs->child[i].t = systime;
+      childs->child[i].aggregation = c->aggregation;
+      ret = MSG_TYPE_REFRESH_CHILD_OK;
+      break;
+    }
+  }
+  if (ret != MSG_TYPE_REFRESH_CHILD_OK) {
+    if(c->child < mynode->id) {
+      retnode = mynode->predecessor;
+    } else {
+      retnode = mynode->successor;
+    }
+    ret = MSG_TYPE_REFRESH_CHILD_REDIRECT;
+  }
+
+  unsigned char msg[CHORD_HEADER_SIZE + sizeof(struct node)+ sizeof(struct aggregate)];
+  marshall_msg(
+    ret, src, sizeof(struct node), (unsigned char *)retnode, msg);
+  add_msg_cont((unsigned char *)mystats, msg,sizeof(struct aggregate), CHORD_HEADER_SIZE + sizeof(struct node));
+
+  return chord_send_nonblock_sock(
+    sock, msg, sizeof(msg), src_addr, src_addr_size);
+  return CHORD_OK;
+}
+
+int
+handle_register_child(chord_msg_t type,
+            unsigned char* data,
+            nodeid_t src,
+            int sock,
+            struct sockaddr* src_addr,
+            size_t src_addr_size)
+{
+  assert(type == MSG_TYPE_REGISTER_CHILD);
+  struct child* c = (struct child*)data;
+  struct node *mynode = get_own_node(), *retnode = mynode;
+  struct childs* childs = get_childs();
+  struct aggregate* mystats = get_stats();
+  time_t systime = time(NULL);
+  chord_msg_t ret = MSG_TYPE_CHORD_ERR;
+  if (c->parent_suc.id == mynode->id) {
+    bool found = false;
+    for (int i = 0; i < CHORD_TREE_CHILDS; i++) {
+      if(childs->child[i].child == c->child) {
+        childs->child[i].t = systime;
+        ret = MSG_TYPE_REGISTER_CHILD_OK;
+        found = true;
+      }
+    }
+    if(!found) {
+      for (int i = 0; i < CHORD_TREE_CHILDS; i++) {
+        if (childs->child[i].t < (systime - 2) ||
+            childs->child[i].parent == 0 || 
+            (mynode->id > CHORD_RING_SIZE/2 && c->parent > childs->child[i].parent) || 
+            (mynode->id < CHORD_RING_SIZE/2 && c->parent < childs->child[i].parent)) {
+          memcpy(&childs->child[i], c, sizeof(struct child));
+          childs->child[i].t = systime;
+          found = true;
+          ret = MSG_TYPE_REGISTER_CHILD_OK;
+          break;
+        }
+      }
+    }
+    if(!found) {
+      ret = MSG_TYPE_REGISTER_CHILD_EFULL;
+      if(c->child > CHORD_RING_SIZE/2) {
+        retnode = mynode->successor;
+      } else {
+        retnode = mynode->predecessor;
+      }
+    }
+  } else {
+    ret = MSG_TYPE_REGISTER_CHILD_EWRONG;
+  }
+  unsigned char msg[CHORD_HEADER_SIZE + sizeof(struct node) + sizeof(struct aggregate)];
+  marshall_msg(ret, src, sizeof(struct node), (unsigned char *)retnode, msg);
+  add_msg_cont((unsigned char *)mystats, msg,sizeof(struct aggregate), CHORD_HEADER_SIZE + sizeof(struct node));
+
+  return chord_send_nonblock_sock(
+    sock, msg, sizeof(msg), src_addr, src_addr_size);
+}
+
+int
 handle_exit(chord_msg_t type,
             unsigned char* data,
             nodeid_t src,

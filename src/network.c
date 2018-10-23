@@ -46,6 +46,14 @@ chord_send_nonblock_sock(int sock,
 }
 
 int
+add_msg_cont(unsigned char* data, unsigned char* to, size_t size,size_t size_existing) {
+  size_t new = ((size_t)to[CHORD_MSG_LENGTH_SLOT]) + size;
+  memcpy(&to[CHORD_MSG_LENGTH_SLOT], &new, CHORD_MSG_LENGTH_SIZE);
+  memcpy(to + size_existing, data, size);
+  return CHORD_OK;
+}
+
+int
 marshall_msg(chord_msg_t msg_type,
              nodeid_t dst_id,
              size_t size,
@@ -172,6 +180,28 @@ wait_for_message(struct node* node, unsigned char* retbuf, size_t bufsize)
                             src_addr_len);
       if (ret == CHORD_ERR) {
         DEBUG(ERROR, "Error in send PONG\n");
+      }
+      break;
+          case MSG_TYPE_REGISTER_CHILD:
+      ret = cc->register_child_handler(type,
+                            content,
+                            src_id,
+                            node->socket,
+                            (struct sockaddr*)&src_addr,
+                            src_addr_len);
+      if (ret == CHORD_ERR) {
+        DEBUG(ERROR, "Error in REGISTER CHILD\n");
+      }
+      break;
+    case MSG_TYPE_REFRESH_CHILD:
+      ret = cc->refresh_child_handler(type,
+                            content,
+                            src_id,
+                            node->socket,
+                            (struct sockaddr*)&src_addr,
+                            src_addr_len);
+      if (ret == CHORD_ERR) {
+        DEBUG(ERROR, "Error in REGISTER CHILD\n");
       }
       break;
     case MSG_TYPE_EXIT:

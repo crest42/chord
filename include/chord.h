@@ -72,6 +72,7 @@ typedef int bool;
 #define FINGERTABLE_SIZE CHORD_RING_BITS
 #define SUCCESSORLIST_SIZE CHORD_RING_BITS
 #define CHORD_PORT (6667)
+#define CHORD_TREE_CHILDS (2)
 #define CHORD_OK (0)
 #define CHORD_ERR (-1)
 #define CHORD_PERIODIC_SLEEP (2)
@@ -125,6 +126,14 @@ enum msg_type
   MSG_TYPE_PUT_ACK = 19,
   MSG_TYPE_GET_RESP = 20,
   MSG_TYPE_FIND_SUCCESSOR_LINEAR = 21,
+  MSG_TYPE_REGISTER_CHILD = 22,
+  MSG_TYPE_REGISTER_CHILD_OK = 23,
+  MSG_TYPE_REGISTER_CHILD_EFULL = 24,
+  MSG_TYPE_REGISTER_CHILD_EWRONG = 25,
+  MSG_TYPE_REGISTER_CHILD_REDIRECT = 26,
+  MSG_TYPE_REFRESH_CHILD = 27,
+  MSG_TYPE_REFRESH_CHILD_OK = 28,
+  MSG_TYPE_REFRESH_CHILD_REDIRECT = 29,
 };
 typedef enum msg_type chord_msg_t;
 
@@ -153,10 +162,10 @@ struct node
 {
   nodeid_t id; /*!< Id of the node. The node id is the hashed ipv6 address of
                   the node modulo the ring size */
-  nodeid_t bin;
+  size_t size;
+  size_t used;
   int socket; /*!< A Socket fd to the node or where we listen for incomming
                  messages. */
-  node_state_t state;
   struct sockaddr_in6 addr;
   struct node* successor;   /*!< Pointer to our successor node. */
   struct node* predecessor; /*!< Pointer to our predecessor node */
@@ -171,6 +180,27 @@ struct key
   unsigned char hash[20];
   unsigned char* data;
   struct key* next;
+};
+
+struct aggregate{
+  int nodes;
+  int available;
+  int used;
+};
+
+struct child
+{
+  nodeid_t parent;
+  nodeid_t child;
+  int i;
+  time_t t;
+  struct node parent_suc;
+  struct aggregate aggregation;
+};
+
+struct childs
+{
+  struct child child[CHORD_TREE_CHILDS];
 };
 
 /**
@@ -230,6 +260,23 @@ handle_notify(chord_msg_t type,
               int sock,
               struct sockaddr* src_addr,
               size_t src_addr_size);
+
+int
+handle_register_child(chord_msg_t type,
+            unsigned char* data,
+            nodeid_t src,
+            int sock,
+            struct sockaddr* src_addr,
+            size_t src_addr_size);
+
+int
+handle_refresh_child(chord_msg_t type,
+            unsigned char* data,
+            nodeid_t src,
+            int sock,
+            struct sockaddr* src_addr,
+            size_t src_addr_size);
+
 struct chord_callbacks
 {
   chord_callback ping_handler;
@@ -239,6 +286,8 @@ struct chord_callbacks
   chord_callback notify_handler;
   chord_callback put_handler;
   chord_callback get_handler;
+  chord_callback register_child_handler;
+  chord_callback refresh_child_handler;
 };
 
 struct chord_callbacks*
@@ -273,6 +322,12 @@ create_node(char* address, struct node* node);
  */
 struct node*
 get_own_node(void);
+
+struct aggregate*
+get_stats(void);
+
+struct childs*
+get_childs(void);
 
 /**
  * \brief Returns fingertable
