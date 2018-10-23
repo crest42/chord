@@ -14,6 +14,7 @@
 #include <assert.h>
 #include <string.h>
 #include <unistd.h>
+#include <time.h>
 
 enum log_level
 {
@@ -31,7 +32,6 @@ enum log_level
 #ifdef DEBUG_ENABLE
 #include <errno.h>
 #include <stdio.h>
-#include <time.h>
 
 void
 debug_printf(unsigned long t,

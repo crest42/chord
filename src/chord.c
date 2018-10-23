@@ -907,6 +907,9 @@ static int aggregate(struct aggregate *aggregation) {
 void*
 thread_periodic(void* n)
 {
+  (void)get_size();
+  (void)get_used();
+  (void)get_nodes();
   int i = 0;
   struct node partner;
   copy_node((struct node*)n, &partner);
