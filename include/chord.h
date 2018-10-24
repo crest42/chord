@@ -42,7 +42,7 @@ debug_printf(unsigned long t,
 char*
 msg_to_string(int msg);
 #define DEBUG(level, ...)                                                      \
-  debug_printf((unsigned long)time(NULL), __FUNCTION__, level, __VA_ARGS__)
+  debug_printf((unsigned long)time(NULL), __func__, level, __VA_ARGS__)
 #else
 #define DEBUG(...)                                                             \
   {}

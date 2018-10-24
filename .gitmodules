@@ -1,0 +1,3 @@
+[submodule "chord"]
+	path = chord
+	url = https://github.com/crest42/chord
