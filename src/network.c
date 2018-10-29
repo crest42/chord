@@ -3,6 +3,8 @@
 int
 bind_socket(struct node* node, const char *addr)
 {
+  assert(node);
+  assert(addr);
   int ret = inet_pton(AF_INET6, addr, &(node->addr.sin6_addr));
   if (ret != 1) {
     if (ret == -1) {
@@ -47,6 +49,10 @@ chord_send_nonblock_sock(int sock,
 
 int
 add_msg_cont(unsigned char* data, unsigned char* to, size_t size,size_t size_existing) {
+  assert(to);
+  assert(data);
+  assert(size > 0);
+  assert(size_existing > 0);
   size_t new = ((size_t)to[CHORD_MSG_LENGTH_SLOT]) + size;
   memcpy(&to[CHORD_MSG_LENGTH_SLOT], &new, CHORD_MSG_LENGTH_SIZE);
   memcpy(to + size_existing, data, size);
@@ -148,12 +154,6 @@ wait_for_message(struct node* node, unsigned char* retbuf, size_t bufsize)
       bufsize = size;
     }
     memcpy(retbuf, content, bufsize);
-  }
-  // TODO: Find better solution. Nodes may have another id than hash(1,ip) and
-  // thus a new joining node sets the dst_id to CHORD_RING_SIZE to not get
-  // dropped.
-  if (!(dst_id == mynode->id || dst_id == CHORD_RING_SIZE)) {
-    //return CHORD_OK;
   }
 
   struct chord_callbacks *cc = get_callbacks();
