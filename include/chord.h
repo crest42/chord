@@ -124,16 +124,18 @@ enum msg_type
   MSG_TYPE_GET = 17,
   MSG_TYPE_PUT = 18,
   MSG_TYPE_PUT_ACK = 19,
-  MSG_TYPE_GET_RESP = 20,
-  MSG_TYPE_FIND_SUCCESSOR_LINEAR = 21,
-  MSG_TYPE_REGISTER_CHILD = 22,
-  MSG_TYPE_REGISTER_CHILD_OK = 23,
-  MSG_TYPE_REGISTER_CHILD_EFULL = 24,
-  MSG_TYPE_REGISTER_CHILD_EWRONG = 25,
-  MSG_TYPE_REGISTER_CHILD_REDIRECT = 26,
-  MSG_TYPE_REFRESH_CHILD = 27,
-  MSG_TYPE_REFRESH_CHILD_OK = 28,
-  MSG_TYPE_REFRESH_CHILD_REDIRECT = 29,
+  MSG_TYPE_PUT_EFAIL = 20,
+  MSG_TYPE_GET_RESP = 21,
+  MSG_TYPE_GET_EFAIL = 22,
+  MSG_TYPE_FIND_SUCCESSOR_LINEAR = 23,
+  MSG_TYPE_REGISTER_CHILD = 24,
+  MSG_TYPE_REGISTER_CHILD_OK = 25,
+  MSG_TYPE_REGISTER_CHILD_EFULL = 26,
+  MSG_TYPE_REGISTER_CHILD_EWRONG = 27,
+  MSG_TYPE_REGISTER_CHILD_REDIRECT = 28,
+  MSG_TYPE_REFRESH_CHILD = 29,
+  MSG_TYPE_REFRESH_CHILD_OK = 30,
+  MSG_TYPE_REFRESH_CHILD_REDIRECT = 31,
 };
 typedef enum msg_type chord_msg_t;
 
@@ -176,7 +178,7 @@ struct key
   nodeid_t id; /*!< Id of the key. The node id is the hashed ipv6 address of
                   the node modulo the ring size */
   nodeid_t owner;
-  size_t size;
+  uint32_t size;
   unsigned char hash[20];
   unsigned char* data;
   struct key* next;

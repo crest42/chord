@@ -57,21 +57,6 @@ struct chord_callbacks *get_callbacks(void) {
   return &cc;
 }
 
-struct key* first_key;
-struct key* last_key;
-
-struct key**
-get_first_key(void)
-{
-  return &first_key;
-}
-
-struct key**
-get_last_key(void)
-{
-  return &last_key;
-}
-
 struct node null_node = { .id = 0,
                           .socket = 0,
                           .successor = NULL,

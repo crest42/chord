@@ -26,7 +26,7 @@ bind_socket(struct node* node, const char *addr)
 
   node->addr.sin6_family = AF_INET6;
   node->addr.sin6_port = htons(CHORD_PORT);
-  DEBUG(INFO, "bind %d %s\n", CHORD_PORT, strerror(errno));
+  DEBUG(INFO, "bind %d\n", CHORD_PORT);
   if ((bind(node->socket, (struct sockaddr*)&node->addr, sizeof(node->addr))) ==
       -1) {
     DEBUG(ERROR, "Error on bind");

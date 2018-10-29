@@ -252,8 +252,6 @@ init_chord(const char* addr)
   memset(&mynode, 0, sizeof(mynode));
   memset(&predecessor, 0, sizeof(predecessor));
   memset(&childs, 0, sizeof(struct child));
-  first_key = NULL;
-  last_key = NULL;
 
   if (bind_socket(&mynode,addr) == CHORD_ERR) {
     return CHORD_ERR;
@@ -334,7 +332,6 @@ chord_send_block_and_wait(struct node* target,
     return MSG_TYPE_CHORD_ERR;
   }
   DEBUG(DEBUG, "New socket %d\n", s);
-
   if (setsockopt(
         s, SOL_SOCKET, SO_RCVTIMEO, (char*)&tout, sizeof(struct timeval)) < 0) {
     DEBUG(ERROR, "set socket timeout: %s\n", strerror(errno));
@@ -730,7 +727,7 @@ thread_wait_for_msg(void* n)
   struct node* node = (struct node*)n;
   while (1) {
     iteration++;
-    DEBUG(DEBUG, "wait for message run %d\n", iteration);
+    DEBUG(INFO, "wait for message run %d\n", iteration);
     if (wait_for_message(node, NULL, 0) == CHORD_ERR) {
       DEBUG(ERROR, "error in wait_for_message\n");
     }
