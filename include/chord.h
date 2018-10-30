@@ -139,6 +139,9 @@ enum msg_type
   MSG_TYPE_GET_SUCCESSORLIST_ID = 32,
   MSG_TYPE_GET_SUCCESSORLIST_ID_RESP = 33,
   MSG_TYPE_GET_SUCCESSORLIST_ID_EFAIL = 34,
+  MSG_TYPE_SYNC = 35,
+  MSG_TYPE_SYNC_REQ_RESP = 36,
+  MSG_TYPE_PUSH = 37,
 };
 typedef enum msg_type chord_msg_t;
 
@@ -300,6 +303,7 @@ struct chord_callbacks
   chord_callback get_handler;
   chord_callback register_child_handler;
   chord_callback refresh_child_handler;
+  chord_callback sync_handler;
 };
 
 struct chord_callbacks*

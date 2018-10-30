@@ -278,6 +278,15 @@ wait_for_message(struct node* node, unsigned char* retbuf, size_t bufsize)
       }
       break;
     }
+    case MSG_TYPE_SYNC:
+      if(cc->sync_handler) {
+        cc->sync_handler(type,content,
+                       src_id,
+                       node->socket,
+                       (struct sockaddr*)&src_addr,
+                       src_addr_len);
+      }
+    break;
     case MSG_TYPE_PUT:
       if (cc->put_handler) {
         cc->put_handler(type,
