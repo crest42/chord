@@ -136,6 +136,9 @@ enum msg_type
   MSG_TYPE_REFRESH_CHILD = 29,
   MSG_TYPE_REFRESH_CHILD_OK = 30,
   MSG_TYPE_REFRESH_CHILD_REDIRECT = 31,
+  MSG_TYPE_GET_SUCCESSORLIST_ID = 32,
+  MSG_TYPE_GET_SUCCESSORLIST_ID_RESP = 33,
+  MSG_TYPE_GET_SUCCESSORLIST_ID_EFAIL = 34,
 };
 typedef enum msg_type chord_msg_t;
 
@@ -177,7 +180,7 @@ struct key
 {
   nodeid_t id; /*!< Id of the key. The node id is the hashed ipv6 address of
                   the node modulo the ring size */
-  nodeid_t owner;
+  uint32_t block;
   uint32_t size;
   unsigned char hash[20];
   unsigned char* data;
@@ -224,6 +227,13 @@ typedef int (*chord_callback)(chord_msg_t,
                               int,
                               struct sockaddr*,
                               size_t);
+
+typedef int(*chord_periodic_hook)(void *);
+
+struct hooks {
+  chord_periodic_hook periodic_hook;
+};
+
 int
 handle_ping(chord_msg_t type,
             unsigned char* data,
@@ -322,14 +332,13 @@ create_node(char* address, struct node* node);
  *
  * @return node Our own node
  */
-struct node*
-get_own_node(void);
+struct node *get_own_node(void);
 
-struct aggregate*
-get_stats(void);
+struct aggregate *get_stats(void);
 
-struct childs*
-get_childs(void);
+struct childs *get_childs(void);
+
+struct hooks *get_hooks(void);
 
 /**
  * \brief Returns fingertable
@@ -433,7 +442,7 @@ int
 notify(struct node* target);
 
 /**
- * Function which needs to be invoked by a thread answer requests from other
+ * \brief  Function which needs to be invoked by a thread answer requests from other
  * nodes
  *
  * Answer messages like get_successor and checks ring on incomming notify
@@ -447,7 +456,7 @@ void*
 thread_wait_for_msg(void* n);
 
 /**
- * Function which needs to be invoked by a thread to stabilize the ring
+ * \brief  Function which needs to be invoked by a thread to stabilize the ring
  *
  * Stabilize the ring as needed by the chord protocoll and then sleeps
  * CHORD_PERIODIC_SLEEP seconds
@@ -460,7 +469,7 @@ void*
 thread_periodic(void* n);
 
 /**
- * Print informations about a node, like it's id, successor and predecessor
+ * \brief Print informations about a node, like it's id, successor and predecessor
  *
  * @param verbose also print successorlist and fingertable
  * @return CHORD_OK if everything is fine CHORD_ERR otherwise
@@ -469,7 +478,7 @@ void
 debug_print_node(struct node* node, bool verbose);
 
 /**
- * Finds out if a node is considered as null
+ * \brief Finds out if a node is considered as null
  *
  * @param node node to check
  * @return true is node id null, false otherwise
@@ -477,21 +486,63 @@ debug_print_node(struct node* node, bool verbose);
 bool
 node_is_null(struct node* node);
 
+/**
+ * \brief Sends data non blocking over a socket
+ *
+ * @param int Socket id
+ * @param msg msg to send
+ * @param size size of the message
+ * @param addr address of the target node
+ * @param addr_len length of the target address
+ *
+ * @return CHORD_OK on successful send, CHORD_ERR otherwise
+ */
 int
 chord_send_nonblock_sock(int sock,
                          unsigned char* msg,
                          size_t size,
                          struct sockaddr* addr,
                          socklen_t addr_len);
-
-                         int
+/**
+ * \brief Removes a failing node out of local data structures
+ *
+ * @param id id of the failing node
+ * @return CHORD_OK is removing was successful, CHORD_ERR otherwise
+ */
+int
 remove_dead_node(nodeid_t id);
 
-
+/**
+ * \brief Creates a copy of a node
+ *
+ * @param node node to copy
+ * @param copy target data structure
+ *
+ * @return CHORD_OK is copy was successful, CHORD_ERR otherwise
+ */
 int
 copy_node(struct node* node, struct node* copy);
 
+/**
+ * \brief checks if an id lies between an interval of two nodes
+ *
+ * check if id is element of [first,second)
+ *
+ * @return true if id is in interval, false if id is outside of interval
+ */
 bool
 in_interval(struct node* first, struct node* second, nodeid_t id);
+bool
+in_interval_id(nodeid_t start, nodeid_t end, nodeid_t test);
 
+/**
+ * \brief Returns the IDs of all nodes in the successorlist of a node
+ *
+ * @param target node to ask
+ * @param id array of SUCCESSORLIST_SIZE nodeid_t elements to return the ids
+ *
+ * @return CHORD_OK on success, CHORD_ERR otherwise
+ */
+int
+get_successorlist_id(struct node *target, nodeid_t *id);
 #endif

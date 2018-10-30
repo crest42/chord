@@ -15,12 +15,6 @@
 
 
 /* Static functions */
-static bool
-in_interval_id(int start, int end, int test)
-{
-  return (mod((test - start), CHORD_RING_SIZE) <
-          mod((end - start), CHORD_RING_SIZE));
-}
 
 static int
 update_successorlist(struct node* src)
@@ -512,6 +506,13 @@ copy_node(struct node* node, struct node* copy)
 }
 
 bool
+in_interval_id(nodeid_t start, nodeid_t end, nodeid_t test)
+{
+  return (mod((test - start), CHORD_RING_SIZE) <
+          mod((end - start), CHORD_RING_SIZE));
+}
+
+bool
 in_interval(struct node* first, struct node* second, nodeid_t id)
 {
   if (!first || !second) {
@@ -623,6 +624,9 @@ init_chord(const char* addr)
   mynode.used = 0;
   a->used = 0;
   a->nodes = 0;
+
+  struct hooks *h = get_hooks();
+  h->periodic_hook = NULL;
 
   return 0;
 }
@@ -741,6 +745,26 @@ chord_send_block_and_wait(struct node* target,
 }
 
 int
+get_successorlist_id(struct node *target, nodeid_t *id) {
+  assert(target);
+  unsigned char msg[CHORD_HEADER_SIZE];
+  marshall_msg(
+      MSG_TYPE_GET_SUCCESSORLIST_ID, target->id, 0, NULL, msg);
+    chord_msg_t type =
+      chord_send_block_and_wait(target,
+                                msg,
+                                CHORD_HEADER_SIZE,
+                                MSG_TYPE_GET_SUCCESSORLIST_ID_RESP,
+                                (unsigned char*)id,
+                                SUCCESSORLIST_SIZE*sizeof(nodeid_t));
+    if (type == MSG_TYPE_GET_SUCCESSORLIST_ID_RESP) {
+      return CHORD_OK;
+    } else {
+      return CHORD_ERR;
+    }
+}
+
+int
 find_successor(struct node* target, struct node* ret, nodeid_t id)
 {
   assert(id <= CHORD_RING_SIZE);
@@ -751,7 +775,7 @@ find_successor(struct node* target, struct node* ret, nodeid_t id)
   DEBUG(INFO, "Start find successor ask: %d for %d\n", target->id, id);
   unsigned char msg[CHORD_HEADER_SIZE + sizeof(nodeid_t)];
   while (final == NULL) {
-    memset(msg, 0, sizeof(msg));
+    memset(msg, 0, sizeof(msg)); //TODO Remove
     marshall_msg(
       query_type, tmp->id, sizeof(nodeid_t), (unsigned char*)&id, msg);
     chord_msg_t type =
@@ -903,6 +927,7 @@ thread_periodic(void* n)
   struct node* node = &mynode;
   struct child c;
   memset(&c, 0, sizeof(c));
+  struct hooks *h = get_hooks();
   while (1) {
     c.child = mynode.id;
     DEBUG(INFO, "%d: sockid: %d periodic run %d\n", node->id, node->socket, i);
@@ -947,6 +972,9 @@ thread_periodic(void* n)
       DEBUG(INFO, "Update successor to %d\n", node->successor->id);
     }
 
+    if(h->periodic_hook) {
+      h->periodic_hook(NULL);
+    }
 
     fix_fingers(node);
 #ifdef DEBUG_ENABLE

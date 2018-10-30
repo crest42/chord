@@ -248,14 +248,33 @@ wait_for_message(struct node* node, unsigned char* retbuf, size_t bufsize)
                    msg);
       ret = chord_send_nonblock_sock(node->socket,
                                      msg,
-                                     CHORD_HEADER_SIZE +  (sizeof(struct node) * SUCCESSORLIST_SIZE),
+                                     sizeof(msg),
                                      (struct sockaddr*)&src_addr,
                                      src_addr_len);
       if (ret == CHORD_ERR) {
         DEBUG(ERROR,
               "Error while sending MSG_TYPE_FIND_SUCCESSOR_RESP_NEXT "
               "nonblocking");
-        DEBUG(ERROR, "");
+      }
+      break;
+    }
+    case MSG_TYPE_GET_SUCCESSORLIST_ID: {
+      struct node *successorlist = get_successorlist();
+      uint32_t offset = 0;
+      unsigned char msg[CHORD_HEADER_SIZE + (SUCCESSORLIST_SIZE*sizeof(nodeid_t))];
+      marshall_msg(MSG_TYPE_GET_SUCCESSORLIST_ID_RESP,src_id,offset,NULL,msg);
+      offset += CHORD_HEADER_SIZE;
+      for(int i = 0;i<SUCCESSORLIST_SIZE;i++) {
+        add_msg_cont((unsigned char *)&(successorlist[i].id),msg,sizeof(nodeid_t),offset);
+        offset += sizeof(nodeid_t);
+      }
+      ret = chord_send_nonblock_sock(node->socket,
+                                     msg,
+                                     sizeof(msg),
+                                     (struct sockaddr*)&src_addr,
+                                     src_addr_len);
+      if (ret == CHORD_ERR) {
+        DEBUG(ERROR, "Error while sending MSG_TYPE_GET_SUCCESSORLIST_ID_RESP");
       }
       break;
     }

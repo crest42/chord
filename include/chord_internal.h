@@ -7,6 +7,11 @@ struct fingertable_entry fingertable[FINGERTABLE_SIZE];
 struct node successorlist[SUCCESSORLIST_SIZE];
 struct childs childs;
 struct aggregate stats;
+struct hooks hooks;
+
+struct hooks *get_hooks(void) {
+  return &hooks;
+}
 
 struct aggregate *get_stats(void) {
   return &stats;
