@@ -1,6 +1,6 @@
 #include "../include/chord.h"
 #include "../include/network.h"
-
+//#include <stdio.h> //TODO:REMOVE
 static nodeid_t
 chord_abs(nodeid_t a, nodeid_t b)
 {
@@ -59,13 +59,15 @@ handle_ping(chord_msg_t type,
             nodeid_t src,
             int sock,
             struct sockaddr* src_addr,
-            size_t src_addr_size)
+            size_t src_addr_size,
+            size_t msg_size)
 {
+  assert(msg_size > 0);
   assert(type == MSG_TYPE_PING);
   struct node *mynode = get_own_node();
   (void)data;
   unsigned char msg[CHORD_HEADER_SIZE + sizeof(nodeid_t)];
-  marshall_msg(
+  marshal_msg(
     MSG_TYPE_PONG, src, sizeof(nodeid_t), (unsigned char*)&(mynode->id), msg);
   int ret = chord_send_nonblock_sock(
     sock, msg, CHORD_HEADER_SIZE + sizeof(nodeid_t), src_addr, src_addr_size);
@@ -78,14 +80,11 @@ handle_refresh_child(chord_msg_t type,
             nodeid_t src,
             int sock,
             struct sockaddr* src_addr,
-            size_t src_addr_size)
+            size_t src_addr_size,
+            size_t msg_size)
 {
   assert(type == MSG_TYPE_REFRESH_CHILD);
-  (void)data;
-  (void)src;
-  (void)sock;
-  (void)src_addr;
-  (void)src_addr_size;
+  assert(msg_size > 0);
   struct child* c = (struct child*)data;
   struct childs *childs = get_childs();
   struct node *mynode = get_own_node(), *retnode = mynode;
@@ -110,7 +109,7 @@ handle_refresh_child(chord_msg_t type,
   }
 
   unsigned char msg[CHORD_HEADER_SIZE + sizeof(struct node)+ sizeof(struct aggregate)];
-  marshall_msg(
+  marshal_msg(
     ret, src, sizeof(struct node), (unsigned char *)retnode, msg);
   add_msg_cont((unsigned char *)mystats, msg,sizeof(struct aggregate), CHORD_HEADER_SIZE + sizeof(struct node));
 
@@ -125,9 +124,11 @@ handle_register_child(chord_msg_t type,
             nodeid_t src,
             int sock,
             struct sockaddr* src_addr,
-            size_t src_addr_size)
+            size_t src_addr_size,
+            size_t msg_size)
 {
   assert(type == MSG_TYPE_REGISTER_CHILD);
+  assert(msg_size > 0);
   struct child* c = (struct child*)data;
   struct node *mynode = get_own_node(), *retnode = mynode;
   struct childs* childs = get_childs();
@@ -169,7 +170,7 @@ handle_register_child(chord_msg_t type,
     ret = MSG_TYPE_REGISTER_CHILD_EWRONG;
   }
   unsigned char msg[CHORD_HEADER_SIZE + sizeof(struct node) + sizeof(struct aggregate)];
-  marshall_msg(ret, src, sizeof(struct node), (unsigned char *)retnode, msg);
+  marshal_msg(ret, src, sizeof(struct node), (unsigned char *)retnode, msg);
   add_msg_cont((unsigned char *)mystats, msg,sizeof(struct aggregate), CHORD_HEADER_SIZE + sizeof(struct node));
 
   return chord_send_nonblock_sock(
@@ -182,8 +183,10 @@ handle_exit(chord_msg_t type,
             nodeid_t src,
             int sock,
             struct sockaddr* src_addr,
-            size_t src_addr_size)
+            size_t src_addr_size,
+            size_t msg_size)
 {
+  assert(msg_size > 0);
   assert(type == MSG_TYPE_EXIT);
   assert(data);
   struct node *mynode = get_own_node();
@@ -199,7 +202,7 @@ handle_exit(chord_msg_t type,
     copy_node(update, mynode->predecessor);
   }
   unsigned char msg[CHORD_HEADER_SIZE];
-  marshall_msg(MSG_TYPE_EXIT_ACK, src, 0, NULL, msg);
+  marshal_msg(MSG_TYPE_EXIT_ACK, src, 0, NULL, msg);
   int ret = chord_send_nonblock_sock(
     sock, msg, CHORD_HEADER_SIZE, src_addr, src_addr_size);
   return ret;
@@ -211,16 +214,18 @@ handle_find_successor(chord_msg_t type,
                       nodeid_t src,
                       int sock,
                       struct sockaddr* src_addr,
-                      size_t src_addr_size)
+                      size_t src_addr_size,
+                      size_t msg_size)
 {
   assert(type == MSG_TYPE_FIND_SUCCESSOR ||
          type == MSG_TYPE_FIND_SUCCESSOR_LINEAR);
+  assert(msg_size > 0);
   struct node *mynode = get_own_node();
   assert(mynode);
   nodeid_t req_id;
   chord_msg_t response_type = MSG_TYPE_FIND_SUCCESSOR_RESP;
   memcpy(&req_id, (nodeid_t*)data, sizeof(req_id));
-  DEBUG(INFO, "req_id is %d my_id is %d from %d\n", req_id, mynode->id, src);
+  DEBUG(DEBUG, "req_id is %d my_id is %d from %d\n", req_id, mynode->id, src);
   struct node successor;
   memset(&successor, 0, sizeof(successor));
   if (req_id == mynode->id) {
@@ -239,7 +244,7 @@ handle_find_successor(chord_msg_t type,
   }
   assert(!node_is_null(&successor));
   unsigned char msg[CHORD_HEADER_SIZE + sizeof(struct node)];
-  marshall_msg(
+  marshal_msg(
     response_type, src, sizeof(struct node), (unsigned char*)&successor, msg);
   int ret = chord_send_nonblock_sock(sock,
                                      msg,
@@ -255,11 +260,12 @@ handle_get_predecessor(chord_msg_t type,
                        nodeid_t src,
                        int sock,
                        struct sockaddr* src_addr,
-                       size_t src_addr_size)
+                       size_t src_addr_size,
+                      size_t msg_size)
 {
   assert(type == MSG_TYPE_GET_PREDECESSOR);
-
-  (void)data;
+  assert(!data);
+  assert(msg_size == 0);
   unsigned char msg[CHORD_HEADER_SIZE + sizeof(struct node)];
   chord_msg_t response_type;
   size_t size = 0;
@@ -271,7 +277,7 @@ handle_get_predecessor(chord_msg_t type,
   } else {
     response_type = MSG_TYPE_GET_PREDECESSOR_RESP_NULL;
   }
-  marshall_msg(
+  marshal_msg(
     response_type, src, size, (unsigned char*)mynode->predecessor, msg);
   return chord_send_nonblock_sock(
     sock, msg, (CHORD_HEADER_SIZE + size), src_addr, src_addr_size);
@@ -283,10 +289,11 @@ handle_notify(chord_msg_t type,
               nodeid_t src,
               int sock,
               struct sockaddr* src_addr,
-              size_t src_addr_size)
+              size_t src_addr_size,
+              size_t msg_size)
 {
   assert(type == MSG_TYPE_NOTIFY);
-
+  assert(msg_size == sizeof(struct node));
   (void)src;
   (void)sock;
   (void)src_addr;

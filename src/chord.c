@@ -20,7 +20,7 @@ static int
 update_successorlist(struct node* src)
 {
   unsigned char msg[CHORD_HEADER_SIZE + sizeof(nodeid_t)];
-  marshall_msg(MSG_TYPE_COPY_SUCCESSORLIST,
+  marshal_msg(MSG_TYPE_COPY_SUCCESSORLIST,
                src->id,
                sizeof(nodeid_t),
                (unsigned char*)(&(mynode.id)),
@@ -31,7 +31,8 @@ update_successorlist(struct node* src)
                               CHORD_HEADER_SIZE + sizeof(nodeid_t),
                               MSG_TYPE_COPY_SUCCESSORLIST_RESP,
                               (unsigned char*)(successorlist + 1),
-                              (sizeof(successorlist) - sizeof(struct node)));
+                              (sizeof(successorlist) - sizeof(struct node)),
+                              NULL);
   if (type == MSG_TYPE_COPY_SUCCESSORLIST_RESP) {
     memcpy(successorlist, src, sizeof(struct node));
     return CHORD_OK;
@@ -159,19 +160,20 @@ static nodeid_t parent_function(nodeid_t id) {
 static int
 get_predecessor(struct node* src, struct node* pre)
 {
-  unsigned char msg[CHORD_HEADER_SIZE + sizeof(nodeid_t)];
-  marshall_msg(MSG_TYPE_GET_PREDECESSOR,
+  unsigned char msg[CHORD_HEADER_SIZE];
+  marshal_msg(MSG_TYPE_GET_PREDECESSOR,
                src->id,
-               sizeof(nodeid_t),
-               (unsigned char*)(&(mynode.id)),
+               0,
+               NULL,
                msg);
   chord_msg_t type =
     chord_send_block_and_wait(src,
                               msg,
-                              CHORD_HEADER_SIZE + sizeof(nodeid_t),
+                              CHORD_HEADER_SIZE,
                               MSG_TYPE_GET_PREDECESSOR_RESP,
                               (unsigned char*)pre,
-                              sizeof(struct node));
+                              sizeof(struct node),
+                              NULL);
   if (type == MSG_TYPE_GET_PREDECESSOR_RESP) {
     return CHORD_OK;
   } else if (type == MSG_TYPE_GET_PREDECESSOR_RESP_NULL) {
@@ -294,7 +296,7 @@ ping_node(struct node* node)
     return false;
   }
   unsigned char msg[CHORD_HEADER_SIZE + sizeof(nodeid_t)];
-  marshall_msg(MSG_TYPE_PING,
+  marshal_msg(MSG_TYPE_PING,
                node->id,
                sizeof(nodeid_t),
                (unsigned char*)(&(mynode.id)),
@@ -306,7 +308,8 @@ ping_node(struct node* node)
                               CHORD_HEADER_SIZE + sizeof(nodeid_t),
                               MSG_TYPE_PONG,
                               (unsigned char*)&retid,
-                              sizeof(nodeid_t));
+                              sizeof(nodeid_t),
+                              NULL);
   if (type == MSG_TYPE_PONG && retid == node->id) {
     return true;
   } else {
@@ -333,7 +336,7 @@ static int
 send_exit(struct node* node, struct node* update)
 {
   unsigned char msg[CHORD_HEADER_SIZE + sizeof(struct node)];
-  marshall_msg(
+  marshal_msg(
     MSG_TYPE_EXIT, node->id, sizeof(struct node), (unsigned char*)update, msg);
 
   while (true) {
@@ -343,7 +346,8 @@ send_exit(struct node* node, struct node* update)
                                 CHORD_HEADER_SIZE + sizeof(struct node),
                                 MSG_TYPE_EXIT_ACK,
                                 NULL,
-                                0);
+                                0,
+                                NULL);
     if (type == MSG_TYPE_EXIT_ACK) {
       return CHORD_OK;
     } else {
@@ -418,7 +422,7 @@ static int register_child(struct child *c){
   unsigned char msg[CHORD_HEADER_SIZE + sizeof(struct child)];
   unsigned char ret[sizeof(struct node) + sizeof(struct aggregate)];
   do {
-    marshall_msg(MSG_TYPE_REGISTER_CHILD,
+    marshal_msg(MSG_TYPE_REGISTER_CHILD,
                c->parent_suc.id,
                sizeof(struct child),
                (unsigned char*)c,
@@ -428,7 +432,8 @@ static int register_child(struct child *c){
                                      CHORD_HEADER_SIZE + sizeof(struct node) + sizeof(struct aggregate),
                                      MSG_TYPE_REGISTER_CHILD_OK,
                                      (unsigned char*)&ret,
-                                     sizeof(ret));
+                                     sizeof(ret),
+                                     NULL);
     memcpy(&c->parent_suc, &ret, sizeof(struct node));
     memcpy(get_stats(), ret + sizeof(struct node), sizeof(struct aggregate));
   } while (type == MSG_TYPE_REGISTER_CHILD_EFULL);
@@ -443,7 +448,7 @@ static int register_child(struct child *c){
 
 static int refresh_parent(struct child *c) {
   unsigned char msg[CHORD_HEADER_SIZE + sizeof(struct child)];
-  marshall_msg(MSG_TYPE_REFRESH_CHILD,
+  marshal_msg(MSG_TYPE_REFRESH_CHILD,
                c->parent_suc.id,
                sizeof(struct child),
                (unsigned char*)c,
@@ -454,7 +459,8 @@ static int refresh_parent(struct child *c) {
                               CHORD_HEADER_SIZE + sizeof(struct child),
                               MSG_TYPE_REFRESH_CHILD_OK,
                               (unsigned char*)&ret,
-                                     sizeof(ret));
+                              sizeof(ret),
+                              NULL);
     memcpy(&c->parent_suc, &ret, sizeof(struct node));
     memcpy(get_stats(), (ret)+sizeof(struct node), sizeof(struct aggregate));
   if(type == MSG_TYPE_REFRESH_CHILD_REDIRECT) {
@@ -649,7 +655,8 @@ chord_send_block_and_wait(struct node* target,
                           size_t size,
                           chord_msg_t wait,
                           unsigned char* buf,
-                          size_t bufsize)
+                          size_t bufsize,
+                          size_t *ret_size)
 {
   assert(target->addr.sin6_family == AF_INET6);
   assert(target->addr.sin6_port == htons(CHORD_PORT));
@@ -725,7 +732,7 @@ chord_send_block_and_wait(struct node* target,
     return MSG_TYPE_CHORD_ERR;
   }
 
-  demarshall_msg(read_buf, &type, &src_id, &dst_id, &msg_size, &msg_content);
+  demarshal_msg(read_buf, &type, &src_id, &dst_id, &msg_size, &msg_content);
   DEBUG(DEBUG,
         "Found Msg type %s (%d) from %d to %d size %d. Wait for: %s (%d)\n",
         msg_to_string(type),
@@ -740,6 +747,8 @@ chord_send_block_and_wait(struct node* target,
     msg_size = bufsize;
   }
   memcpy(buf, msg_content, msg_size);
+  if(ret_size)
+    *ret_size = msg_size;
   close(s);
   return type;
 }
@@ -748,7 +757,7 @@ int
 get_successorlist_id(struct node *target, nodeid_t *id) {
   assert(target);
   unsigned char msg[CHORD_HEADER_SIZE];
-  marshall_msg(
+  marshal_msg(
       MSG_TYPE_GET_SUCCESSORLIST_ID, target->id, 0, NULL, msg);
     chord_msg_t type =
       chord_send_block_and_wait(target,
@@ -756,7 +765,8 @@ get_successorlist_id(struct node *target, nodeid_t *id) {
                                 CHORD_HEADER_SIZE,
                                 MSG_TYPE_GET_SUCCESSORLIST_ID_RESP,
                                 (unsigned char*)id,
-                                SUCCESSORLIST_SIZE*sizeof(nodeid_t));
+                                SUCCESSORLIST_SIZE*sizeof(nodeid_t),
+                                NULL);
     if (type == MSG_TYPE_GET_SUCCESSORLIST_ID_RESP) {
       return CHORD_OK;
     } else {
@@ -776,7 +786,7 @@ find_successor(struct node* target, struct node* ret, nodeid_t id)
   unsigned char msg[CHORD_HEADER_SIZE + sizeof(nodeid_t)];
   while (final == NULL) {
     memset(msg, 0, sizeof(msg)); //TODO Remove
-    marshall_msg(
+    marshal_msg(
       query_type, tmp->id, sizeof(nodeid_t), (unsigned char*)&id, msg);
     chord_msg_t type =
       chord_send_block_and_wait(tmp,
@@ -784,7 +794,8 @@ find_successor(struct node* target, struct node* ret, nodeid_t id)
                                 CHORD_HEADER_SIZE + sizeof(nodeid_t),
                                 MSG_TYPE_FIND_SUCCESSOR_RESP,
                                 (unsigned char*)ret,
-                                sizeof(struct node));
+                                sizeof(struct node),
+                                NULL);
     if (type == MSG_TYPE_FIND_SUCCESSOR_RESP_NEXT) {
       steps++;
       tmp = ret;
@@ -826,7 +837,7 @@ notify(struct node* target)
   }
   DEBUG(INFO, "Notify successor %d\n", target->id);
   unsigned char msg[CHORD_HEADER_SIZE + sizeof(struct node)];
-  marshall_msg(MSG_TYPE_NOTIFY,
+  marshal_msg(MSG_TYPE_NOTIFY,
                target->id,
                sizeof(struct node),
                (unsigned char*)(&mynode),
@@ -837,7 +848,8 @@ notify(struct node* target)
                               CHORD_HEADER_SIZE + sizeof(struct node),
                               MSG_TYPE_NO_WAIT,
                               NULL,
-                              0);
+                              0,
+                              NULL);
   if (type == MSG_TYPE_CHORD_ERR) {
     DEBUG(ERROR, "Error in notify returned msg type MSG_TYPE_CHORD_ERR\n");
     return CHORD_ERR;
@@ -907,7 +919,7 @@ thread_wait_for_msg(void* n)
   struct node* node = (struct node*)n;
   while (1) {
     iteration++;
-    DEBUG(INFO, "wait for message run %d\n", iteration);
+    DEBUG(DEBUG, "wait for message run %d\n", iteration);
     if (wait_for_message(node, NULL, 0) == CHORD_ERR) {
       DEBUG(ERROR, "error in wait_for_message\n");
     }
@@ -949,15 +961,7 @@ thread_periodic(void* n)
     } else {
       DEBUG(ERROR, "Error in stabilization Procedure: %d\n");
     }
- 
-    aggregate(get_stats());
-    memcpy(&c.aggregation, get_stats(), sizeof(struct aggregate));
-    if (!is_root(&mynode, mynode.predecessor)) {
-      register_child(&c);
-      refresh_parent(&c);
-    } else {
-      DEBUG(INFO,"root got %d nodes %d/%d used\n",get_nodes(),get_used(),get_size());
-    }
+
     if (!node_is_null(node->predecessor) && !check_predecessor(node)) {
       DEBUG(
         ERROR, "ERROR PRE %d Do not respond to ping\n", node->predecessor->id);
@@ -971,8 +975,18 @@ thread_periodic(void* n)
       pop_successor(node->successor);
       DEBUG(INFO, "Update successor to %d\n", node->successor->id);
     }
+    DEBUG(INFO, "Aggregate Stats\n");
+    aggregate(get_stats());
+    memcpy(&c.aggregation, get_stats(), sizeof(struct aggregate));
+    if (!is_root(&mynode, mynode.predecessor)) {
+      register_child(&c);
+      refresh_parent(&c);
+    } else {
+      DEBUG(INFO,"root got %d nodes %d/%d used\n",get_nodes(),get_used(),get_size());
+    }
 
     if(h->periodic_hook) {
+      DEBUG(INFO, "Call periodic Hook\n");
       h->periodic_hook(NULL);
     }
 

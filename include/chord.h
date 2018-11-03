@@ -141,7 +141,9 @@ enum msg_type
   MSG_TYPE_GET_SUCCESSORLIST_ID_EFAIL = 34,
   MSG_TYPE_SYNC = 35,
   MSG_TYPE_SYNC_REQ_RESP = 36,
-  MSG_TYPE_PUSH = 37,
+  MSG_TYPE_SYNC_REQ_FETCH = 37,
+  MSG_TYPE_SYNC_REQ_FETCH_OK = 38,
+  MSG_TYPE_PUSH = 39,
 };
 typedef enum msg_type chord_msg_t;
 
@@ -229,6 +231,7 @@ typedef int (*chord_callback)(chord_msg_t,
                               nodeid_t,
                               int,
                               struct sockaddr*,
+                              size_t,
                               size_t);
 
 typedef int(*chord_periodic_hook)(void *);
@@ -243,7 +246,8 @@ handle_ping(chord_msg_t type,
             nodeid_t src,
             int sock,
             struct sockaddr* src_addr,
-            size_t src_addr_size);
+            size_t src_addr_size,
+            size_t msg_size);
 
 int
 handle_exit(chord_msg_t type,
@@ -251,14 +255,16 @@ handle_exit(chord_msg_t type,
             nodeid_t src,
             int sock,
             struct sockaddr* src_addr,
-            size_t src_addr_size);
+            size_t src_addr_size,
+            size_t msg_size);
 int
 handle_find_successor(chord_msg_t type,
                       unsigned char* data,
                       nodeid_t src,
                       int sock,
                       struct sockaddr* src_addr,
-                      size_t src_addr_size);
+                      size_t src_addr_size,
+                      size_t msg_size);
 
 int
 handle_get_predecessor(chord_msg_t type,
@@ -266,7 +272,8 @@ handle_get_predecessor(chord_msg_t type,
                        nodeid_t src,
                        int sock,
                        struct sockaddr* src_addr,
-                       size_t src_addr_size);
+                       size_t src_addr_size,
+                       size_t msg_size);
 
 int
 handle_notify(chord_msg_t type,
@@ -274,7 +281,8 @@ handle_notify(chord_msg_t type,
               nodeid_t src,
               int sock,
               struct sockaddr* src_addr,
-              size_t src_addr_size);
+              size_t src_addr_size,
+              size_t msg_size);
 
 int
 handle_register_child(chord_msg_t type,
@@ -282,7 +290,8 @@ handle_register_child(chord_msg_t type,
             nodeid_t src,
             int sock,
             struct sockaddr* src_addr,
-            size_t src_addr_size);
+            size_t src_addr_size,
+            size_t msg_size);
 
 int
 handle_refresh_child(chord_msg_t type,
@@ -290,7 +299,8 @@ handle_refresh_child(chord_msg_t type,
             nodeid_t src,
             int sock,
             struct sockaddr* src_addr,
-            size_t src_addr_size);
+            size_t src_addr_size,
+            size_t msg_size);
 
 struct chord_callbacks
 {
@@ -304,6 +314,7 @@ struct chord_callbacks
   chord_callback register_child_handler;
   chord_callback refresh_child_handler;
   chord_callback sync_handler;
+  chord_callback sync_fetch_handler;
 };
 
 struct chord_callbacks*
@@ -317,7 +328,8 @@ chord_send_block_and_wait(struct node* target,
                           size_t size,
                           chord_msg_t wait,
                           unsigned char* buf,
-                          size_t bufsize);
+                          size_t bufsize,
+                          size_t *ret_size);
 
 /**
  * \brief Set up a node struct from a given address

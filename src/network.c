@@ -60,7 +60,7 @@ add_msg_cont(unsigned char* data, unsigned char* to, size_t size,size_t size_exi
 }
 
 int
-marshall_msg(chord_msg_t msg_type,
+marshal_msg(chord_msg_t msg_type,
              nodeid_t dst_id,
              size_t size,
              unsigned char* content,
@@ -71,7 +71,9 @@ marshall_msg(chord_msg_t msg_type,
   struct node *mynode = get_own_node();
   assert(mynode);
   assert(mynode->id > 0);
-
+  if (content != NULL && size > 0) {
+    memmove(&msg[CHORD_HEADER_SIZE], content, size);
+  }
   DEBUG(DEBUG,
         "craft msg %s with size %d from %d to dst: %d\n",
         msg_to_string(msg_type),
@@ -82,14 +84,11 @@ marshall_msg(chord_msg_t msg_type,
   memcpy(&msg[CHORD_MSG_SRC_ID_SLOT], &(mynode->id), CHORD_MSG_SRC_ID_SIZE);
   memcpy(&msg[CHORD_MSG_DST_ID_SLOT], &dst_id, CHORD_MSG_DST_ID_SIZE);
   memcpy(&msg[CHORD_MSG_LENGTH_SLOT], &size, CHORD_MSG_LENGTH_SIZE);
-  if (content != NULL && size > 0) {
-    memcpy(&msg[CHORD_HEADER_SIZE], content, size);
-  }
   return CHORD_OK;
 }
 
 int
-demarshall_msg(unsigned char* buf,
+demarshal_msg(unsigned char* buf,
                chord_msg_t* type,
                nodeid_t* src_id,
                nodeid_t* dst_id,
@@ -142,8 +141,8 @@ wait_for_message(struct node* node, unsigned char* retbuf, size_t bufsize)
     close(node->socket);
     return CHORD_ERR;
   }
-  demarshall_msg(buf, &type, &src_id, &dst_id, &size, &content);
-  DEBUG(INFO,
+  demarshal_msg(buf, &type, &src_id, &dst_id, &size, &content);
+  DEBUG(DEBUG,
         "Got %s Request with size %d from %d to %d\n",
         msg_to_string(type),
         (int)size,
@@ -165,7 +164,8 @@ wait_for_message(struct node* node, unsigned char* retbuf, size_t bufsize)
                                       src_id,
                                       node->socket,
                                       (struct sockaddr*)&src_addr,
-                                      src_addr_len);
+                                      src_addr_len,
+                                      size);
       if (ret == CHORD_ERR) {
         DEBUG(ERROR,
               "Error while sending MSG_TYPE_FIND_SUCCESSOR_RESP nonblocking");
@@ -177,7 +177,8 @@ wait_for_message(struct node* node, unsigned char* retbuf, size_t bufsize)
                             src_id,
                             node->socket,
                             (struct sockaddr*)&src_addr,
-                            src_addr_len);
+                            src_addr_len,
+                            size);
       if (ret == CHORD_ERR) {
         DEBUG(ERROR, "Error in send PONG\n");
       }
@@ -188,7 +189,8 @@ wait_for_message(struct node* node, unsigned char* retbuf, size_t bufsize)
                             src_id,
                             node->socket,
                             (struct sockaddr*)&src_addr,
-                            src_addr_len);
+                            src_addr_len,
+                            size);
       if (ret == CHORD_ERR) {
         DEBUG(ERROR, "Error in REGISTER CHILD\n");
       }
@@ -199,7 +201,8 @@ wait_for_message(struct node* node, unsigned char* retbuf, size_t bufsize)
                             src_id,
                             node->socket,
                             (struct sockaddr*)&src_addr,
-                            src_addr_len);
+                            src_addr_len,
+                            size);
       if (ret == CHORD_ERR) {
         DEBUG(ERROR, "Error in REGISTER CHILD\n");
       }
@@ -210,7 +213,8 @@ wait_for_message(struct node* node, unsigned char* retbuf, size_t bufsize)
                             src_id,
                             node->socket,
                             (struct sockaddr*)&src_addr,
-                            src_addr_len);
+                            src_addr_len,
+                            size);
       if (ret == CHORD_ERR) {
         DEBUG(ERROR, "Error in send PONG\n");
       }
@@ -218,11 +222,12 @@ wait_for_message(struct node* node, unsigned char* retbuf, size_t bufsize)
     case MSG_TYPE_GET_PREDECESSOR:
 
       ret = cc->get_predecessor_handler(type,
-                                       content,
+                                       NULL,
                                        src_id,
                                        node->socket,
                                        (struct sockaddr*)&src_addr,
-                                       src_addr_len);
+                                       src_addr_len,
+                                       size);
       if (ret == CHORD_ERR) {
         DEBUG(ERROR,
               "Error while sending MSG_TYPE_FIND_SUCCESSOR_RESP_NEXT "
@@ -236,12 +241,13 @@ wait_for_message(struct node* node, unsigned char* retbuf, size_t bufsize)
                         src_id,
                         node->socket,
                         (struct sockaddr*)&src_addr,
-                        src_addr_len);
+                        src_addr_len,
+                        size);
       break;
     case MSG_TYPE_COPY_SUCCESSORLIST: {
       struct node *successorlist = get_successorlist();
       unsigned char msg[CHORD_HEADER_SIZE + (sizeof(struct node) * SUCCESSORLIST_SIZE)];
-      marshall_msg(MSG_TYPE_COPY_SUCCESSORLIST_RESP,
+      marshal_msg(MSG_TYPE_COPY_SUCCESSORLIST_RESP,
                    src_id,
                     (sizeof(struct node) * SUCCESSORLIST_SIZE),
                    (unsigned char*)successorlist,
@@ -262,7 +268,7 @@ wait_for_message(struct node* node, unsigned char* retbuf, size_t bufsize)
       struct node *successorlist = get_successorlist();
       uint32_t offset = 0;
       unsigned char msg[CHORD_HEADER_SIZE + (SUCCESSORLIST_SIZE*sizeof(nodeid_t))];
-      marshall_msg(MSG_TYPE_GET_SUCCESSORLIST_ID_RESP,src_id,offset,NULL,msg);
+      marshal_msg(MSG_TYPE_GET_SUCCESSORLIST_ID_RESP,src_id,offset,NULL,msg);
       offset += CHORD_HEADER_SIZE;
       for(int i = 0;i<SUCCESSORLIST_SIZE;i++) {
         add_msg_cont((unsigned char *)&(successorlist[i].id),msg,sizeof(nodeid_t),offset);
@@ -280,11 +286,24 @@ wait_for_message(struct node* node, unsigned char* retbuf, size_t bufsize)
     }
     case MSG_TYPE_SYNC:
       if(cc->sync_handler) {
-        cc->sync_handler(type,content,
+        cc->sync_handler(type,
+                       content,
                        src_id,
                        node->socket,
                        (struct sockaddr*)&src_addr,
-                       src_addr_len);
+                       src_addr_len,
+                       size);
+      }
+    break;
+    case MSG_TYPE_SYNC_REQ_FETCH:
+      if(cc->sync_fetch_handler) {
+        cc->sync_fetch_handler(type,
+                       content,
+                       src_id,
+                       node->socket,
+                       (struct sockaddr*)&src_addr,
+                       src_addr_len,
+                       size);
       }
     break;
     case MSG_TYPE_PUT:
@@ -294,7 +313,8 @@ wait_for_message(struct node* node, unsigned char* retbuf, size_t bufsize)
                        src_id,
                        node->socket,
                        (struct sockaddr*)&src_addr,
-                       src_addr_len);
+                       src_addr_len,
+                       size);
       }
       break;
     case MSG_TYPE_GET:
@@ -304,7 +324,8 @@ wait_for_message(struct node* node, unsigned char* retbuf, size_t bufsize)
                        src_id,
                        node->socket,
                        (struct sockaddr*)&src_addr,
-                       src_addr_len);
+                       src_addr_len,
+                       size);
       }
       break;
     default:

@@ -67,5 +67,5 @@ struct node null_node = { .id = 0,
                           .successor = NULL,
                           .predecessor = NULL };
 
-struct timeval tout = { .tv_sec = 3, .tv_usec = 0 };
+struct timeval tout = { .tv_sec = 1, .tv_usec = 0 };
 #endif

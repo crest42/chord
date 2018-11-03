@@ -14,14 +14,14 @@ int
 bind_socket(struct node* node, const char *addr);
 
 int
-demarshall_msg(unsigned char* buf,
+demarshal_msg(unsigned char* buf,
                chord_msg_t* type,
                nodeid_t* src_id,
                nodeid_t* dst_id,
                size_t* size,
                unsigned char** content);
 int
-marshall_msg(chord_msg_t msg_type,
+marshal_msg(chord_msg_t msg_type,
              nodeid_t dst_id,
              size_t size,
              unsigned char* content,
