@@ -396,6 +396,15 @@ node_exit(struct node* node)
   return CHORD_OK;
 }*/
 
+
+static bool in_sync(void) {
+  struct node *mynode = get_own_node();
+  if (!node_is_null(mynode->successor) && !node_is_null(mynode->predecessor)) {
+    return true;
+  }
+  return false;
+}
+
 static bool is_root(struct node *n, struct node *pre) {
   return in_interval(pre,n,(CHORD_RING_SIZE/2)-1);
 }
@@ -691,11 +700,12 @@ chord_send_block_and_wait(struct node* target,
         "connect to port %d (id %d)\n",
         ntohs(target->addr.sin6_port),
         target->id);
+  errno = 0;
   if (connect(s,
               (struct sockaddr*)&target->addr,
               sizeof(struct sockaddr_in6)) == -1) {
     close(s);
-    DEBUG(ERROR, "connect %d: %s", s, strerror(errno));
+    DEBUG(ERROR, "connect %d: %s\n", s, strerror(errno));
     return MSG_TYPE_CHORD_ERR;
   }
   int ret = 0;
@@ -774,14 +784,10 @@ get_successorlist_id(struct node *target, nodeid_t *id) {
     }
 }
 
-int
-find_successor(struct node* target, struct node* ret, nodeid_t id)
-{
-  assert(id <= CHORD_RING_SIZE);
+static int chord_find_successor(struct node *target, struct node *ret, nodeid_t id) {
   struct node *final = NULL, *tmp = target;
   int steps = 1;
   chord_msg_t query_type = MSG_TYPE_FIND_SUCCESSOR;
-
   DEBUG(INFO, "Start find successor ask: %d for %d\n", target->id, id);
   unsigned char msg[CHORD_HEADER_SIZE + sizeof(nodeid_t)];
   while (final == NULL) {
@@ -809,7 +815,6 @@ find_successor(struct node* target, struct node* ret, nodeid_t id)
       }
     } else if (type == MSG_TYPE_CHORD_ERR &&
                query_type == MSG_TYPE_FIND_SUCCESSOR) {
-
       query_type = MSG_TYPE_FIND_SUCCESSOR_LINEAR;
       tmp = target; // TODO: Only search starting from the last node
       DEBUG(INFO, "Start linear scan %d ask for %d\n", tmp->id, id);
@@ -826,6 +831,20 @@ find_successor(struct node* target, struct node* ret, nodeid_t id)
   }
   DEBUG(INFO, "Found successor for %d on %d steps: %d\n", id, steps, ret->id);
   return CHORD_OK;
+}
+
+int
+find_successor(struct node* target, struct node* ret, nodeid_t id)
+{
+  assert(id <= CHORD_RING_SIZE);
+  struct node* self = get_own_node();
+  if (!node_is_null(self->predecessor) &&
+      in_interval(self->predecessor, self, id)) {
+    copy_node(get_own_node(),ret);
+    return CHORD_OK;
+  } else {
+    return chord_find_successor(target, ret, id);
+  }
 }
 
 int
@@ -985,7 +1004,7 @@ thread_periodic(void* n)
       DEBUG(INFO,"root got %d nodes %d/%d used\n",get_nodes(),get_used(),get_size());
     }
 
-    if(h->periodic_hook) {
+    if(in_sync() && h->periodic_hook) {
       DEBUG(INFO, "Call periodic Hook\n");
       h->periodic_hook(NULL);
     }

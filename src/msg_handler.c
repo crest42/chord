@@ -228,9 +228,7 @@ handle_find_successor(chord_msg_t type,
   DEBUG(DEBUG, "req_id is %d my_id is %d from %d\n", req_id, mynode->id, src);
   struct node successor;
   memset(&successor, 0, sizeof(successor));
-  if (req_id == mynode->id) {
-    copy_node(mynode->successor, &successor);
-  } else if (!node_is_null(mynode->successor) &&
+  if (!node_is_null(mynode->successor) &&
              in_interval(mynode, mynode->successor, req_id)) {
     copy_node(mynode->successor, &successor);
   } else {
