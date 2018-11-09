@@ -1,6 +1,21 @@
 #include "../include/chord.h"
 #include "../include/network.h"
 
+#ifdef POSIX_SOCK
+int sock_wrapper_open(struct socket_wrapper *wrapper,struct node *node,struct node *target,int local_port,int remote_port){
+  return CHORD_OK;
+}
+int sock_wrapper_recv(struct socket_wrapper *wrapper,unsigned char *buf, size_t buf_size,int flags) {
+  return CHORD_OK;
+}
+int sock_wrapper_send(struct socket_wrapper *wrapper,unsigned char *buf, size_t buf_size) {
+  return CHORD_OK;
+}
+int sock_wrapper_close(struct socket_wrapper *wrapper) {
+  return CHORD_OK;
+}
+#endif
+
 int
 addr_to_node(struct node* node, const char *addr)
 {
@@ -110,7 +125,6 @@ wait_for_message(struct node* node, struct socket_wrapper *s)
   #else
   int flags = 0;
   #endif
-  errno = 0;
   int ret = sock_wrapper_recv(s,buf,sizeof(buf),flags);
   if (ret < (int)CHORD_HEADER_SIZE) {
     assert(false);
