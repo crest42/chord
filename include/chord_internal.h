@@ -2,6 +2,7 @@
 #define _LIBCHORD_INT_H
 #include "chord.h"
 struct node mynode;
+struct node_additional my_additional;
 struct node predecessor;
 struct fingertable_entry fingertable[FINGERTABLE_SIZE];
 struct node successorlist[SUCCESSORLIST_SIZE];
@@ -63,9 +64,7 @@ struct chord_callbacks *get_callbacks(void) {
 }
 
 struct node null_node = { .id = 0,
-                          .socket = 0,
-                          .successor = NULL,
-                          .predecessor = NULL };
+                          .additional = NULL };
 
 struct timeval tout = { .tv_sec = 1, .tv_usec = 0 };
 #endif

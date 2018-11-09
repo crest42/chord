@@ -15,6 +15,10 @@
 #include <string.h>
 #include <unistd.h>
 #include <time.h>
+#ifdef RIOT
+#include "net/sock/udp.h"
+#define TIMEOUT (2*US_PER_SEC)
+#endif
 
 enum log_level
 {
@@ -92,7 +96,7 @@ typedef int bool;
    CHORD_MSG_SRC_ID_SIZE)
 #define CHORD_MSG_MAX_CONTENT_SIZE (MAX_MSG_SIZE - CHORD_HEADER_SIZE)
 
-#define MAX_MSG_SIZE 1024
+#define MAX_MSG_SIZE 1200
 
 /**
  * \brief Possible Message Types
@@ -147,22 +151,6 @@ enum msg_type
 };
 typedef enum msg_type chord_msg_t;
 
-
-/**
- * \brief Nodes State for ID Transition
- *
- * @see http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.86.7648&rep=rep1&type=pdf
- */
-enum node_state
-{
-
-  STATE_B = 0,
-  STATE_F = 1,
-  STATE_F_ASTERISK = 3,
-  STATE_A = 4
-};
-typedef enum msg_type node_state_t;
-
 /**
  * \brief A definition of a node
  *
@@ -172,14 +160,29 @@ struct node
 {
   nodeid_t id; /*!< Id of the node. The node id is the hashed ipv6 address of
                   the node modulo the ring size */
-  size_t size;
-  size_t used;
-  int socket; /*!< A Socket fd to the node or where we listen for incomming
-                 messages. */
-  struct sockaddr_in6 addr;
+  uint32_t size;
+  uint32_t used;
+  struct in6_addr addr;
+  struct node_additional* additional;   /*!< Pointer to our successor node. */
+};
+
+struct node_additional {
   struct node* successor;   /*!< Pointer to our successor node. */
   struct node* predecessor; /*!< Pointer to our predecessor node */
 };
+
+#ifdef RIOT
+struct socket_wrapper {
+  sock_udp_t sock;
+  sock_udp_ep_t remote;
+  sock_udp_ep_t local;
+};
+#else
+struct socket_wrapper {
+  int sock;
+  struct sockaddr_in6 remote;
+};
+#endif
 
 struct key
 {
@@ -229,9 +232,7 @@ struct fingertable_entry
 typedef int (*chord_callback)(chord_msg_t,
                               unsigned char*,
                               nodeid_t,
-                              int,
-                              struct sockaddr*,
-                              size_t,
+                              struct socket_wrapper *,
                               size_t);
 
 typedef int(*chord_periodic_hook)(void *);
@@ -244,62 +245,47 @@ int
 handle_ping(chord_msg_t type,
             unsigned char* data,
             nodeid_t src,
-            int sock,
-            struct sockaddr* src_addr,
-            size_t src_addr_size,
+            struct socket_wrapper *sock,
             size_t msg_size);
 
 int
 handle_exit(chord_msg_t type,
             unsigned char* data,
             nodeid_t src,
-            int sock,
-            struct sockaddr* src_addr,
-            size_t src_addr_size,
+            struct socket_wrapper *sock,
             size_t msg_size);
 int
 handle_find_successor(chord_msg_t type,
-                      unsigned char* data,
-                      nodeid_t src,
-                      int sock,
-                      struct sockaddr* src_addr,
-                      size_t src_addr_size,
-                      size_t msg_size);
+            unsigned char* data,
+            nodeid_t src,
+            struct socket_wrapper *sock,
+            size_t msg_size);
 
 int
 handle_get_predecessor(chord_msg_t type,
-                       unsigned char* data,
-                       nodeid_t src,
-                       int sock,
-                       struct sockaddr* src_addr,
-                       size_t src_addr_size,
-                       size_t msg_size);
-
+            unsigned char* data,
+            nodeid_t src,
+            struct socket_wrapper *sock,
+            size_t msg_size);
 int
 handle_notify(chord_msg_t type,
-              unsigned char* data,
-              nodeid_t src,
-              int sock,
-              struct sockaddr* src_addr,
-              size_t src_addr_size,
-              size_t msg_size);
+            unsigned char* data,
+            nodeid_t src,
+            struct socket_wrapper *sock,
+            size_t msg_size);
 
 int
 handle_register_child(chord_msg_t type,
             unsigned char* data,
             nodeid_t src,
-            int sock,
-            struct sockaddr* src_addr,
-            size_t src_addr_size,
+            struct socket_wrapper *sock,
             size_t msg_size);
 
 int
 handle_refresh_child(chord_msg_t type,
             unsigned char* data,
             nodeid_t src,
-            int sock,
-            struct sockaddr* src_addr,
-            size_t src_addr_size,
+            struct socket_wrapper *sock,
             size_t msg_size);
 
 struct chord_callbacks
@@ -505,20 +491,16 @@ node_is_null(struct node* node);
 /**
  * \brief Sends data non blocking over a socket
  *
- * @param int Socket id
  * @param msg msg to send
  * @param size size of the message
- * @param addr address of the target node
- * @param addr_len length of the target address
+ * @param s socket wrapper
  *
  * @return CHORD_OK on successful send, CHORD_ERR otherwise
  */
 int
-chord_send_nonblock_sock(int sock,
-                         unsigned char* msg,
+chord_send_nonblock_sock(unsigned char* msg,
                          size_t size,
-                         struct sockaddr* addr,
-                         socklen_t addr_len);
+                         struct socket_wrapper *s);
 /**
  * \brief Removes a failing node out of local data structures
  *

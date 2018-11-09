@@ -9,9 +9,13 @@
 #define _LIBCHORD_NETWORK_H
 
 int
-wait_for_message(struct node* node, unsigned char* retbuf, size_t bufsize);
+wait_for_message(struct node* node, struct socket_wrapper *s);
+int sock_wrapper_open(struct socket_wrapper *wrapper,struct node *node,struct node *target,int local_port,int remote_port);
+int sock_wrapper_recv(struct socket_wrapper *wrapper,unsigned char *buf, size_t buf_size,int flags);
+int sock_wrapper_send(struct socket_wrapper *wrapper,unsigned char *buf, size_t buf_size);
+int sock_wrapper_close(struct socket_wrapper *wrapper);
 int
-bind_socket(struct node* node, const char *addr);
+addr_to_node(struct node* node, const char *addr);
 
 int
 demarshal_msg(unsigned char* buf,
