@@ -477,7 +477,7 @@ static int refresh_parent(struct child *c) {
   }
   return CHORD_OK;
 }
-
+#ifdef DEBUG_ENABLE
 static int get_nodes(void) {
   return get_stats()->nodes;
 }
@@ -489,6 +489,7 @@ static int get_used(void) {
 static int get_size(void) {
   return get_stats()->available;
 }
+#endif
 
 static int aggregate(struct aggregate *aggregation) {
   int nodes = 0, available = 0, used = 0;
@@ -897,11 +898,6 @@ create_node(char* address, struct node* node)
 void*
 thread_wait_for_msg(void* n)
 {
-  static msg_t _msg_q[16];
-  msg_init_queue(_msg_q, 16);
-  static gnrc_netreg_entry_t _udp_handler  = { .demux_ctx = 6667 };
-  gnrc_netreg_entry_init_pid(&_udp_handler, GNRC_NETREG_DEMUX_CTX_ALL,
-                                 sched_active_pid);
   int iteration = 0;
   struct node* node = (struct node*)n;
   struct socket_wrapper s;
@@ -923,12 +919,6 @@ thread_wait_for_msg(void* n)
 void*
 thread_periodic(void* n)
 {
-  static gnrc_netreg_entry_t _udp_handler  = { .demux_ctx = 6668 };
-  gnrc_netreg_entry_init_pid(&_udp_handler, GNRC_NETREG_DEMUX_CTX_ALL,
-                                 sched_active_pid);
-  static msg_t _msg_q[16];
-  msg_init_queue(_msg_q, 16);
-
   int i = 0;
   struct node partner;
   copy_node((struct node*)n, &partner);
