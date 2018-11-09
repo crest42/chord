@@ -19,7 +19,7 @@
 #include "net/sock/udp.h"
 #define TIMEOUT (2*US_PER_SEC)
 #else
-#include <sys/sockets.h>
+#include <sys/socket.h>
 #define TIMEOUT (2)
 #endif
 
