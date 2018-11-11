@@ -620,6 +620,7 @@ init_chord(const char* addr)
   memset(&childs, 0, sizeof(struct child));
 
   if (addr_to_node(&mynode,addr) == CHORD_ERR) {
+    DEBUG(ERROR, "Error while translating address %s to binary\n", addr);
     return CHORD_ERR;
   }
 
