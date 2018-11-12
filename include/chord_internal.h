@@ -10,7 +10,16 @@ struct childs childs;
 struct aggregate stats;
 struct hooks hooks;
 
-struct hooks *get_hooks(void) {
+#ifdef DEBUG_ENABLE
+time_t start;
+time_t atm;
+size_t read_b;
+size_t write_b;
+#endif
+
+struct hooks*
+get_hooks(void)
+{
   return &hooks;
 }
 

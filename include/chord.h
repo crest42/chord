@@ -50,8 +50,12 @@ char*
 msg_to_string(int msg);
 #define DEBUG(level, ...)                                                      \
   debug_printf((unsigned long)time(NULL), __func__, level, __VA_ARGS__)
+#define GETTIME()                                                      \
+  time(NULL)
 #else
 #define DEBUG(...)                                                             \
+  {}
+#define GETTIME(...)                                                             \
   {}
 #define DEBUG_LEVEL OFF
 #endif

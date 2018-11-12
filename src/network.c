@@ -125,9 +125,8 @@ wait_for_message(struct node* node, struct socket_wrapper *s)
   #else
   int flags = 0;
   #endif
-  int ret = sock_wrapper_recv(s,buf,sizeof(buf),flags);
+  int ret = sock_wrapper_recv(s, buf, sizeof(buf), flags);
   if (ret < (int)CHORD_HEADER_SIZE) {
-    assert(false);
     DEBUG(ERROR,
           "Error in recv: %s (recieved) %d < (CHORD_HEADER_SIZE) %d ",
           strerror(errno),
@@ -290,7 +289,6 @@ wait_for_message(struct node* node, struct socket_wrapper *s)
       break;
     }
     default:
-      assert(false);
       return CHORD_OK;
       break;
   }
