@@ -416,7 +416,6 @@ static nodeid_t get_parent(struct child *c) {
     nodeid_t tmp = c->parent;
     c->parent = parent_function(c->parent);
     DEBUG(DEBUG,"parent function for %d is %d\n", tmp, c->parent);
-    printf("parent function for %d is %d\n", tmp, c->parent);
     if(tmp != c->parent) {
       c->i++;
     }
@@ -428,7 +427,7 @@ static int register_child(struct child *c){
   assert(c);
   struct child new;
   get_parent(&new);
-  if(new.parent == c->parent) {
+  if(false && new.parent == c->parent) {
     return CHORD_OK;
   } else {
     c->parent = new.parent;
@@ -437,37 +436,36 @@ static int register_child(struct child *c){
   chord_msg_t type = MSG_TYPE_CHORD_ERR;
   struct node* mynode = get_own_node();
   do {
-    printf("find suc for %d\n",c->parent-1);
     find_successor(mynode->additional->predecessor, &c->parent_suc, c->parent - 1);
   } while (c->parent_suc.id == mynode->id);
   unsigned char msg[CHORD_HEADER_SIZE + sizeof(struct child)];
   unsigned char ret[sizeof(struct node) + sizeof(struct aggregate)];
   do {
-    printf("Register childs %d with parent func %d at %d\n",mynode->id,c->parent,c->parent_suc.id);
-    DEBUG(INFO,
+  DEBUG(INFO,
         "Register Child P^%d(%d) = %d on %d\n",
         c->i,
         get_own_node()->id,
         c->parent,
         c->parent_suc.id);
-    marshal_msg(MSG_TYPE_REGISTER_CHILD,
+  marshal_msg(MSG_TYPE_REGISTER_CHILD,
                c->parent_suc.id,
                sizeof(struct child),
                (unsigned char*)c,
                msg);
-    type = chord_send_block_and_wait(&c->parent_suc,
+  type = chord_send_block_and_wait(&c->parent_suc,
                                      msg,
                                      CHORD_HEADER_SIZE + sizeof(struct node) + sizeof(struct aggregate),
                                      MSG_TYPE_REGISTER_CHILD_OK,
                                      (unsigned char*)&ret,
                                      sizeof(ret),
                                      NULL);
-    memcpy(&c->parent_suc, &ret, sizeof(struct node));
-    memcpy(get_stats(), ret + sizeof(struct node), sizeof(struct aggregate));
-  } while (type == MSG_TYPE_REGISTER_CHILD_EFULL);
+  memcpy(&c->parent_suc, &ret, sizeof(struct node));
+  memcpy(get_stats(), ret + sizeof(struct node), sizeof(struct aggregate));
+  } while (type == MSG_TYPE_REGISTER_CHILD_REDIRECT);
   if (type == MSG_TYPE_REGISTER_CHILD_OK) {
     return CHORD_OK;
   } else {
+    c->parent = 0;
     DEBUG(DEBUG, "get msg type %s\n", msg_to_string(type));
     return type;
   }
@@ -475,7 +473,6 @@ static int register_child(struct child *c){
 }
 
 static int refresh_parent(struct child *c) {
-  printf("refresh child %d at parent %d\n",get_own_node()->id,c->parent_suc.id);
   assert(c->parent_suc.id != get_own_node()->id);
   unsigned char msg[CHORD_HEADER_SIZE + sizeof(struct child)];
   marshal_msg(MSG_TYPE_REFRESH_CHILD,
@@ -498,8 +495,7 @@ static int refresh_parent(struct child *c) {
   } else if(type == MSG_TYPE_CHORD_ERR) {
     return CHORD_ERR;
   }
-  printf("done\n");
-  return CHORD_OK;
+  return CHORD_ERR;
 }
 #ifdef DEBUG_ENABLE
 static int get_nodes(void) {
@@ -591,6 +587,9 @@ add_node(struct node* node)
         }
       } else {
         mynode.id = n.id / 2;
+        if(mynode.id == (CHORD_RING_SIZE/2)-1) {
+          mynode.id++;
+        }
       }
     }
 
@@ -603,7 +602,7 @@ add_node(struct node* node)
     }
   } else {
     if (CHORD_CHANGE_ID) {
-      mynode.id = CHORD_RING_SIZE;
+      mynode.id = CHORD_RING_SIZE-1;
     }
     copy_node(&mynode, mynode.additional->successor);
     DEBUG(INFO, "Create new chord ring %d\n", mynode.additional->successor->id);
@@ -1005,23 +1004,24 @@ thread_periodic(void* n)
       DEBUG(INFO, "Update successor to %d\n", node->additional->successor->id);
     }
 
+
     DEBUG(INFO, "Aggregate Stats\n");
     aggregate(get_stats());
     memcpy(&c.aggregation, get_stats(), sizeof(struct aggregate));
     if (!is_root(&mynode, mynode.additional->predecessor)) {
-      printf("start tree cons\n");
       if (!node_is_null(node->additional->predecessor) && !node_is_null(node->additional->successor)) {
         register_child(&c);
       }
       if(!node_is_null(&c.parent_suc)) {
-
-        refresh_parent(&c);
+        if(refresh_parent(&c) == CHORD_ERR) {
+          memset(&c.parent_suc, 0, sizeof(struct node));
+        }
       }
     } else {
       DEBUG(INFO,"root got %d nodes %d/%d used\n",get_nodes(),get_used(),get_size());
     }
 
-    if(in_sync() && h->periodic_hook) {
+    if (in_sync() && h->periodic_hook) {
       DEBUG(INFO, "Call periodic Hook\n");
       h->periodic_hook(NULL);
     }
