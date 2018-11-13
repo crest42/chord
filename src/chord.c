@@ -618,7 +618,7 @@ init_chord(const char* addr)
   memset(&my_additional, 0, sizeof(my_additional));
   memset(&predecessor, 0, sizeof(predecessor));
   memset(&childs, 0, sizeof(struct child));
-  start = GETTIME();
+  start = time(NULL);
   if (addr_to_node(&mynode, addr) == CHORD_ERR) {
     DEBUG(ERROR, "Error while translating address %s to binary\n", addr);
     return CHORD_ERR;
@@ -929,7 +929,8 @@ thread_periodic(void* n)
   struct hooks *h = get_hooks();
 
   while (1) {
-    atm = GETTIME();
+    atm = time(NULL);
+    #ifdef DEBUG_ENABLE
     time_t runtime = atm - start;
     if(runtime > 1) {
       double read_s = read_b / runtime, write_s = write_b/runtime, overall_s = (read_b + write_b) / runtime;
@@ -944,6 +945,7 @@ thread_periodic(void* n)
         read_b + write_b,
         overall_s);
     }
+    #endif
     c.child = mynode.id;
     DEBUG(INFO, "%d: periodic run %d\n", node->id, i);
     assert(!node_is_null(mynode.additional->successor));
