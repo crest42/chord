@@ -439,6 +439,8 @@ static int register_child(struct child *c){
   unsigned char msg[CHORD_HEADER_SIZE + sizeof(struct child)];
   unsigned char ret[sizeof(struct node) + sizeof(struct aggregate)];
   do {
+          printf("Register childs %d with parent func %d at %d\n",mynode->id,c->parent,c->parent_suc.id);
+
     DEBUG(INFO,
         "Register Child P^%d(%d) = %d on %d\n",
         c->i,
@@ -477,6 +479,8 @@ static int refresh_parent(struct child *c) {
                sizeof(struct child),
                (unsigned char*)c,
                msg);
+                   printf("refresh shild %d at parent %d\n",get_own_node()->id,c->parent_suc.id);
+
   unsigned char ret[sizeof(struct node) + sizeof(struct aggregate)];
   chord_msg_t type = chord_send_block_and_wait(&c->parent_suc,
                               msg,

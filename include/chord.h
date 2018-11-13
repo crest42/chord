@@ -15,6 +15,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <time.h>
+#include <stdio.h>
 #ifdef RIOT
 #include "net/sock/udp.h"
 #define TIMEOUT (2*US_PER_SEC)
