@@ -424,13 +424,27 @@ static nodeid_t get_parent(struct child *c) {
 }
 
 static int register_child(struct child *c){
-  get_parent(c);
+  assert(c);
+  struct child new;
+  get_parent(&new);
+  if(new.parent == c->parent) {
+    return CHORD_OK;
+  } else {
+    c->parent = new.parent;
+    c->i      = new.i;
+  }
   chord_msg_t type = MSG_TYPE_CHORD_ERR;
   struct node* mynode = get_own_node();
   find_successor(mynode, &c->parent_suc, c->parent-1);
   unsigned char msg[CHORD_HEADER_SIZE + sizeof(struct child)];
   unsigned char ret[sizeof(struct node) + sizeof(struct aggregate)];
   do {
+    DEBUG(INFO,
+        "Register Child P^%d(%d) = %d on %d\n",
+        c->i,
+        get_own_node()->id,
+        c->parent,
+        c->parent_suc.id);
     marshal_msg(MSG_TYPE_REGISTER_CHILD,
                c->parent_suc.id,
                sizeof(struct child),
@@ -456,6 +470,7 @@ static int register_child(struct child *c){
 }
 
 static int refresh_parent(struct child *c) {
+  assert(c->parent_suc.id != get_own_node()->id);
   unsigned char msg[CHORD_HEADER_SIZE + sizeof(struct child)];
   marshal_msg(MSG_TYPE_REFRESH_CHILD,
                c->parent_suc.id,
@@ -474,6 +489,8 @@ static int refresh_parent(struct child *c) {
     memcpy(get_stats(), (ret)+sizeof(struct node), sizeof(struct aggregate));
   if(type == MSG_TYPE_REFRESH_CHILD_REDIRECT) {
     register_child(c);
+  } else if(type == MSG_TYPE_CHORD_ERR) {
+    return CHORD_ERR;
   }
   return CHORD_OK;
 }
@@ -927,7 +944,6 @@ thread_periodic(void* n)
   struct child c;
   memset(&c, 0, sizeof(c));
   struct hooks *h = get_hooks();
-
   while (1) {
     atm = time(NULL);
     #ifdef DEBUG_ENABLE
@@ -986,12 +1002,13 @@ thread_periodic(void* n)
     aggregate(get_stats());
     memcpy(&c.aggregation, get_stats(), sizeof(struct aggregate));
     if (!is_root(&mynode, mynode.additional->predecessor)) {
-      register_child(&c);
+      if(!node_is_null(node->additional->predecessor)){
+        register_child(&c);
+      }
       refresh_parent(&c);
     } else {
       DEBUG(INFO,"root got %d nodes %d/%d used\n",get_nodes(),get_used(),get_size());
     }
-
 
     if(in_sync() && h->periodic_hook) {
       DEBUG(INFO, "Call periodic Hook\n");

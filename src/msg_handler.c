@@ -87,19 +87,18 @@ handle_refresh_child(chord_msg_t type,
   chord_msg_t ret = MSG_TYPE_CHORD_ERR;
   for (int i = 0; i < CHORD_TREE_CHILDS; i++) {
     if(childs->child[i].child == c->child) {
-      childs->child[i].t = systime;
-      childs->child[i].aggregation = c->aggregation;
-      ret = MSG_TYPE_REFRESH_CHILD_OK;
+      if (!node_is_null(mynode->additional->predecessor) &&
+          in_interval(
+            mynode->additional->predecessor, mynode, childs->child[i].parent-1)) {
+        childs->child[i].t = systime;
+        childs->child[i].aggregation = c->aggregation;
+        ret = MSG_TYPE_REFRESH_CHILD_OK;
+      } else {
+        ret = MSG_TYPE_REFRESH_CHILD_REDIRECT;
+        retnode = mynode->additional->predecessor;
+      }
       break;
     }
-  }
-  if (ret != MSG_TYPE_REFRESH_CHILD_OK) {
-    if(c->child < mynode->id) {
-      retnode = mynode->additional->predecessor;
-    } else {
-      retnode = mynode->additional->successor;
-    }
-    ret = MSG_TYPE_REFRESH_CHILD_REDIRECT;
   }
 
   unsigned char msg[CHORD_HEADER_SIZE + sizeof(struct node)+ sizeof(struct aggregate)];
@@ -136,7 +135,7 @@ handle_register_child(chord_msg_t type,
     }
     if(!found) {
       for (int i = 0; i < CHORD_TREE_CHILDS; i++) {
-        if (childs->child[i].t < (systime - 2) ||
+        if (childs->child[i].t < (systime - CHORD_CHILD_TIMEOUT) ||
             childs->child[i].parent == 0 || 
             (mynode->id > CHORD_RING_SIZE/2 && c->parent > childs->child[i].parent) || 
             (mynode->id < CHORD_RING_SIZE/2 && c->parent < childs->child[i].parent)) {

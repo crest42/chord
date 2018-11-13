@@ -87,6 +87,7 @@ typedef int bool;
 #define CHORD_CHANGE_ID (1)
 #define CHORD_CHANGE_INTERVAL (5)
 #define CHORD_MSG_COMMAND_SLOT (0)
+#define CHORD_CHILD_TIMEOUT (2)
 #define CHORD_MSG_COMMAND_SIZE (sizeof(chord_msg_t))
 #define CHORD_MSG_SRC_ID_SIZE (sizeof(nodeid_t))
 #define CHORD_MSG_SRC_ID_SLOT (CHORD_MSG_COMMAND_SLOT + CHORD_MSG_COMMAND_SIZE)
