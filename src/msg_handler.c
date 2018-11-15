@@ -128,6 +128,9 @@ handle_register_child(chord_msg_t type,
           childs->child[i].child < c->child) &&
          in_interval_id(
            childs->child[i].child, c->child, childs->child[i].parent - 1))) {
+      if(childs->child[i].child != c->child) {
+        //printf("overwrite child %d with %d\n",childs->child[i].child,c->child);
+      }
       memcpy(&childs->child[i], c, sizeof(struct child));
       childs->child[i].t = systime;
       ret = MSG_TYPE_REGISTER_CHILD_OK;
@@ -147,21 +150,28 @@ handle_register_child(chord_msg_t type,
       }
     }
     if(farthest) {
+      if(farthest->child != c->child) {
+        //printf("overwrite child %d with %d\n",farthest->child,c->child);
+      }
       memcpy(farthest, c, sizeof(struct child));
       farthest->t = systime;
       ret = MSG_TYPE_REGISTER_CHILD_OK;
       overloaded = false;
     } else {
-      retnode = mynode->additional->predecessor;
-      ret = MSG_TYPE_REGISTER_CHILD_REDIRECT;
-      overloaded = false;
+      if(!node_is_null(mynode->additional->predecessor)) {
+        retnode = mynode->additional->predecessor;
+        ret = MSG_TYPE_REGISTER_CHILD_REDIRECT;
+        overloaded = false;
+      } else {
+        ret = MSG_TYPE_REFRESH_CHILD_OK;
+      }
     }
   }
   unsigned char msg[CHORD_HEADER_SIZE + sizeof(struct node) + sizeof(struct aggregate)];
   marshal_msg(ret, src, sizeof(struct node), (unsigned char *)retnode, msg);
   add_msg_cont((unsigned char *)mystats, msg,sizeof(struct aggregate), CHORD_HEADER_SIZE + sizeof(struct node));
   return chord_send_nonblock_sock(msg, sizeof(msg), s);
-  }
+}
 
 int
 handle_exit(chord_msg_t type,

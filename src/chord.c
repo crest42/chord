@@ -16,6 +16,29 @@
 
 /* Static functions */
 
+static int reset_fingertable(void) {
+  nodeid_t start = 0;
+  nodeid_t interval = 0;
+  for (int i = 0; i < FINGERTABLE_SIZE; i++) {
+    //TODO: Double Modulo?
+    start = (mynode.id + ((1 << i) % CHORD_RING_SIZE)) % CHORD_RING_SIZE;
+    interval =
+      (mynode.id + ((1 << (i + 1)) % CHORD_RING_SIZE)) % CHORD_RING_SIZE;
+    interval -= start;
+    fingertable[i].start = start;
+    fingertable[i].interval = interval;
+  }
+  return CHORD_OK;
+}
+
+static int set_nodeid(nodeid_t id) {
+  assert(id > 0);
+  assert(id <= CHORD_RING_SIZE);
+  struct node* mynode = get_own_node();
+  mynode->id = id;
+  return reset_fingertable();
+}
+
 static int
 update_successorlist(struct node* src)
 {
@@ -43,6 +66,35 @@ update_successorlist(struct node* src)
   return CHORD_OK;
 }
 
+
+static int
+get_predecessor(struct node* target, struct node* pre)
+{
+  unsigned char msg[CHORD_HEADER_SIZE];
+  marshal_msg(MSG_TYPE_GET_PREDECESSOR,
+               target->id,
+               0,
+               NULL,
+               msg);
+  chord_msg_t type =
+    chord_send_block_and_wait(target,
+                              msg,
+                              CHORD_HEADER_SIZE,
+                              MSG_TYPE_GET_PREDECESSOR_RESP,
+                              (unsigned char*)pre,
+                              sizeof(struct node),
+                              NULL);
+  if (type == MSG_TYPE_GET_PREDECESSOR_RESP) {
+    return CHORD_OK;
+  } else if (type == MSG_TYPE_GET_PREDECESSOR_RESP_NULL) {
+    memset(pre, 0, sizeof(struct node));
+    return CHORD_OK;
+  } else {
+    DEBUG(ERROR, "get msg type %s %d\n", msg_to_string(type), type);
+    return CHORD_ERR;
+  }
+}
+
 /* base-2 logarithm, rounding down */
 static inline uint32_t lg_down(uint32_t x) {
   return 31U - __builtin_clzl(x);
@@ -54,48 +106,85 @@ static inline uint32_t lg_up(uint32_t x) {
 }
 
 static int tree_granularity(int l) {
-  int c = 1;
-  int x = l - lg_up(l) - c;
+  int x = l - lg_up(l) - 1;
   return (x < 0) ? 0 : x;
 }
 
-static int find_splitnode(struct node *target, struct node *ret) {
-  find_successor(target, ret, mynode.id);
+static bool nodes_share_n_bits(nodeid_t first, nodeid_t second, int bits) {
+  nodeid_t mask = ((nodeid_t)__INT_MAX__) ^ (nodeid_t)(((int)1 << (CHORD_RING_BITS - bits)) - 1);
+    if ((first & mask) == (second & mask)) {
+      return true;
+    }
+    return false;
+}
+
+static nodeid_t get_share(struct node *node, struct node *successor) {
+  assert(node);
+  assert(successor);
+  if (successor->id > node->id) {
+    return successor->id - node->id;
+  } else {
+    return (CHORD_RING_SIZE - node->id) + successor->id;
+  }
+}
+
+static nodeid_t find_splitnode(struct node *target) {
+
+  struct node r, pre;
+  find_successor(target, &r, mynode.id);
   struct node list[CHORD_RING_BITS];
   memset(list, 0, sizeof(list));
   for (int i = 0; i < CHORD_RING_BITS; i++) {
     if(i == 0) {
-      find_successor(target, &list[i], target->id);
+      find_successor(&r, &list[i], r.id);
+      if(list[i].id == r.id) {
+        break;
+      }
     } else {
-      find_successor(target, &list[i], list[i-1].id);
+      find_successor(&r, &list[i], list[i-1].id);
+      if(list[i].id == list[0].id) {
+        break;
+      }
     }
   }
   int i, set = 0;
-  nodeid_t myid = mynode.id | (1 << (CHORD_RING_BITS - tree_granularity(CHORD_RING_BITS)));
   for (i = 0; i < CHORD_RING_BITS; i++) {
-    nodeid_t id =
-      list[i].id | (1 << (CHORD_RING_BITS - tree_granularity(CHORD_RING_BITS)));
-    nodeid_t mask =
-      ((nodeid_t)__INT_MAX__) ^
-      (((nodeid_t)1 << (CHORD_RING_BITS - tree_granularity(CHORD_RING_BITS))) - 1);
-    if ((myid & mask) == (id & mask)) {
+    if (list[i].id != 0 && nodes_share_n_bits(r.id,list[i].id,tree_granularity(CHORD_RING_BITS))) {
       set++;
     }
   }
-  if (i >= (CHORD_RING_BITS - tree_granularity(CHORD_RING_BITS))) {
-    return CHORD_OK;
+  nodeid_t share;
+  if (set >= 1 << (CHORD_RING_BITS - tree_granularity(CHORD_RING_BITS))) {
+    get_predecessor(&r, &pre);
+    if(pre.id < r.id) {
+      share = r.id - pre.id;
+    } else {
+      share = (CHORD_RING_SIZE - pre.id) + r.id;
+    }
+    return r.id-(share/2);
   } else {
-    nodeid_t max = 0;
+    nodeid_t max_share = 0;
     int max_id = 0;
-    for (; i < SUCCESSORLIST_SIZE-1; i++) {
-      if(i<SUCCESSORLIST_SIZE-1 && successorlist[i+1].id-successorlist[i].id > max) {
-        max = successorlist[i + 1].id - successorlist[i].id;
+    for (int i = 1; i < CHORD_RING_BITS; i++) {
+      if(list[i].id == 0) {
+        break;
+      }
+      struct node *a, *b;
+      if (i == 0) {
+        a = &r;
+        b = &list[0];
+      } else {
+        a = &list[i - 1];
+        b = &list[i];
+      }
+      share = get_share(a, b);
+      if (share > max_share) {
+        max_share = share;
         max_id = i;
       }
     }
-    memcpy(ret,&successorlist[max_id],sizeof(struct node));
+    return list[max_id].id-(max_share/2);
   }
-  return CHORD_OK;
 }
 
 static int
@@ -117,16 +206,8 @@ pop_successor(struct node* next)
 static int
 init_fingertable(void)
 {
-  nodeid_t start = 0;
-  nodeid_t interval = 0;
+  reset_fingertable();
   for (int i = 0; i < FINGERTABLE_SIZE; i++) {
-    //TODO: Double Modulo?
-    start = (mynode.id + ((1 << i) % CHORD_RING_SIZE)) % CHORD_RING_SIZE;
-    interval =
-      (mynode.id + ((1 << (i + 1)) % CHORD_RING_SIZE)) % CHORD_RING_SIZE;
-    interval -= start;
-    fingertable[i].start = start;
-    fingertable[i].interval = interval;
     memset(&fingertable[i].node, 0, sizeof(struct node));
   }
   return CHORD_OK;
@@ -158,34 +239,6 @@ static nodeid_t parent_function(nodeid_t id) {
 }
 
 static int
-get_predecessor(struct node* target, struct node* pre)
-{
-  unsigned char msg[CHORD_HEADER_SIZE];
-  marshal_msg(MSG_TYPE_GET_PREDECESSOR,
-               target->id,
-               0,
-               NULL,
-               msg);
-  chord_msg_t type =
-    chord_send_block_and_wait(target,
-                              msg,
-                              CHORD_HEADER_SIZE,
-                              MSG_TYPE_GET_PREDECESSOR_RESP,
-                              (unsigned char*)pre,
-                              sizeof(struct node),
-                              NULL);
-  if (type == MSG_TYPE_GET_PREDECESSOR_RESP) {
-    return CHORD_OK;
-  } else if (type == MSG_TYPE_GET_PREDECESSOR_RESP_NULL) {
-    memset(pre, 0, sizeof(struct node));
-    return CHORD_OK;
-  } else {
-    DEBUG(ERROR, "get msg type %s %d\n", msg_to_string(type), type);
-    return CHORD_ERR;
-  }
-}
-
-static int
 stabilize(struct node* node)
 {
   struct node pre;
@@ -196,6 +249,11 @@ stabilize(struct node* node)
     DEBUG(INFO,
           "got pre %d\n",
           (int)pre.id);
+    if(pre.id == mynode.id && memcmp(&pre.addr,&mynode.addr,sizeof(pre.addr)) != 0) {
+      set_nodeid(find_splitnode(node));
+      find_successor(node, mynode.additional->successor, mynode.id);
+      return CHORD_ERR;
+    }
     if (ret != CHORD_ERR) {
       if (!node_is_null(&pre)) {
         if (node->id != pre.id && in_interval(node, node->additional->successor, pre.id)) {
@@ -473,7 +531,8 @@ static int register_child(struct child *c){
 }
 
 static int refresh_parent(struct child *c) {
-  assert(c->parent_suc.id != get_own_node()->id);
+//  assert(c->parent_suc.id != get_own_node()->id);
+
   unsigned char msg[CHORD_HEADER_SIZE + sizeof(struct child)];
   marshal_msg(MSG_TYPE_REFRESH_CHILD,
                c->parent_suc.id,
@@ -575,22 +634,7 @@ add_node(struct node* node)
 {
   if (node) {
     if (CHORD_CHANGE_ID) {
-      struct node n;
-      struct node suc;
-      find_splitnode(node, &n);
-      find_successor(node, &suc, n.id);
-      if(suc.id != n.id) {
-        if(suc.id > n.id) {
-          mynode.id = (n.id+((suc.id - n.id) / 2))%CHORD_RING_SIZE;
-        } else {
-          mynode.id = (n.id+(((CHORD_RING_SIZE - n.id) + suc.id) / 2))%CHORD_RING_SIZE;
-        }
-      } else {
-        mynode.id = n.id / 2;
-        if(mynode.id == (CHORD_RING_SIZE/2)-1) {
-          mynode.id++;
-        }
-      }
+      set_nodeid(find_splitnode(node));
     }
 
     for (int i = 1; i <= 3 && (join(&mynode, node) == CHORD_ERR); i++) {
@@ -602,7 +646,7 @@ add_node(struct node* node)
     }
   } else {
     if (CHORD_CHANGE_ID) {
-      mynode.id = CHORD_RING_SIZE-1;
+      set_nodeid(CHORD_RING_SIZE-1);
     }
     copy_node(&mynode, mynode.additional->successor);
     DEBUG(INFO, "Create new chord ring %d\n", mynode.additional->successor->id);
@@ -726,6 +770,7 @@ chord_send_block_and_wait(struct node* target,
 
   DEBUG(DEBUG, "Wait for answer\n");
   ret = sock_wrapper_recv(&sock,read_buf,MAX_MSG_SIZE,TIMEOUT);
+  DEBUG(INFO, "Got %d\n",ret);
   if (ret < (int)CHORD_HEADER_SIZE) {
     DEBUG(ERROR,
           "Error in recv: %s (received) %d < (CHORD_HEADER_SIZE) %d\n",
@@ -746,7 +791,15 @@ chord_send_block_and_wait(struct node* target,
         (int)msg_size,
         msg_to_string(wait),
         wait);
-
+  if(size > MAX_MSG_SIZE) {
+    //HOTFIX https://github.com/RIOT-OS/RIOT/issues/10389
+    return CHORD_OK;
+  }
+  assert((int)type >= 0);
+  assert((int)src_id > 0);
+  assert((int)dst_id > 0);
+  assert((int)msg_size >= 0);
+  assert((int)msg_size < MAX_MSG_SIZE);
   if (msg_size > bufsize) {
     msg_size = bufsize;
   }
@@ -949,8 +1002,8 @@ thread_periodic(void* n)
   struct node* node = &mynode;
   struct child c;
   memset(&c, 0, sizeof(c));
-  struct hooks *h = get_hooks();
   while (1) {
+    struct hooks *h = get_hooks();
     atm = time(NULL);
     #ifdef DEBUG_ENABLE
     time_t runtime = atm - start;
@@ -980,12 +1033,16 @@ thread_periodic(void* n)
     assert(node->additional->predecessor);
 
     DEBUG(INFO, "Start stabilization Procedure\n");
+    nodeid_t old = mynode.id;
     if (stabilize(node) == CHORD_OK) {
       if (!node_is_null(node->additional->successor)) {
         DEBUG(INFO, "Update successorlist\n");
         update_successorlist(node->additional->successor);
       }
     } else {
+      if(old != mynode.id) {
+        continue;
+      }
       DEBUG(ERROR, "Error in stabilization Procedure: %d\n");
     }
 
@@ -1006,8 +1063,7 @@ thread_periodic(void* n)
 
 
     DEBUG(INFO, "Aggregate Stats\n");
-    aggregate(get_stats());
-    memcpy(&c.aggregation, get_stats(), sizeof(struct aggregate));
+    aggregate(&c.aggregation);
     if (!is_root(&mynode, mynode.additional->predecessor)) {
       if (!node_is_null(node->additional->predecessor) && !node_is_null(node->additional->successor)) {
         register_child(&c);
@@ -1018,12 +1074,17 @@ thread_periodic(void* n)
         }
       }
     } else {
-      DEBUG(INFO,"root got %d nodes %d/%d used\n",get_nodes(),get_used(),get_size());
+      memcpy(get_stats(), &c.aggregation, sizeof(struct aggregate));
+      DEBUG(INFO,
+            "root got %d nodes %d/%d used\n",
+            get_nodes(),
+            get_used(),
+            get_size());
     }
 
     if (in_sync() && h->periodic_hook) {
       DEBUG(INFO, "Call periodic Hook\n");
-      h->periodic_hook(NULL);
+      h->periodic_hook(h->periodic_data);
     }
 
     fix_fingers(node);

@@ -73,5 +73,7 @@ struct chord_callbacks *get_callbacks(void) {
 struct node null_node = { .id = 0,
                           .additional = NULL };
 
+#ifndef RIOT
 struct timeval tout = { .tv_sec = 1, .tv_usec = 0 };
+#endif
 #endif
