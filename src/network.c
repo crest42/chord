@@ -64,9 +64,11 @@ marshal_msg(chord_msg_t msg_type,
 {
   assert(msg_type > 0);
   assert(dst_id > 0);
-  struct node *mynode = get_own_node();
+  assert((int)size >= 0);
+  struct node* mynode = get_own_node();
   assert(mynode);
   assert(mynode->id > 0);
+  uint32_t tmp = 0;
   if (content != NULL && size > 0) {
     memmove(&msg[CHORD_HEADER_SIZE], content, size);
   }
@@ -76,10 +78,14 @@ marshal_msg(chord_msg_t msg_type,
         (int)size,
         mynode->id,
         dst_id);
-  memcpy(&msg[CHORD_MSG_COMMAND_SLOT], &msg_type, CHORD_MSG_COMMAND_SIZE);
-  memcpy(&msg[CHORD_MSG_SRC_ID_SLOT], &(mynode->id), CHORD_MSG_SRC_ID_SIZE);
-  memcpy(&msg[CHORD_MSG_DST_ID_SLOT], &dst_id, CHORD_MSG_DST_ID_SIZE);
-  memcpy(&msg[CHORD_MSG_LENGTH_SLOT], &size, CHORD_MSG_LENGTH_SIZE);
+  tmp = htonl((uint32_t)msg_type);
+  memcpy(&msg[CHORD_MSG_COMMAND_SLOT], &tmp, CHORD_MSG_COMMAND_SIZE);
+  tmp = htonl((uint32_t)(mynode->id));
+  memcpy(&msg[CHORD_MSG_SRC_ID_SLOT], &tmp, CHORD_MSG_SRC_ID_SIZE);
+  tmp = htonl((uint32_t)dst_id);
+  memcpy(&msg[CHORD_MSG_DST_ID_SLOT], &tmp, CHORD_MSG_DST_ID_SIZE);
+  tmp = htonl((uint32_t)size);
+  memcpy(&msg[CHORD_MSG_LENGTH_SLOT], &tmp, CHORD_MSG_LENGTH_SIZE);
   return CHORD_OK;
 }
 
@@ -92,17 +98,22 @@ demarshal_msg(unsigned char* buf,
                unsigned char** content)
 {
   assert(buf);
+  uint32_t tmp;
   if (type) {
-    memcpy(type, &buf[CHORD_MSG_COMMAND_SLOT], CHORD_MSG_COMMAND_SIZE);
+    memcpy(&tmp, &buf[CHORD_MSG_COMMAND_SLOT], CHORD_MSG_COMMAND_SIZE);
+    *type = (chord_msg_t)ntohl(tmp);
   }
   if (src_id) {
-    memcpy(src_id, &buf[CHORD_MSG_SRC_ID_SLOT], CHORD_MSG_SRC_ID_SIZE);
+    memcpy(&tmp, &buf[CHORD_MSG_SRC_ID_SLOT], CHORD_MSG_SRC_ID_SIZE);
+    *src_id = (nodeid_t)ntohl(tmp);
   }
   if (dst_id) {
-    memcpy(dst_id, &buf[CHORD_MSG_DST_ID_SLOT], CHORD_MSG_DST_ID_SIZE);
+    memcpy(&tmp, &buf[CHORD_MSG_DST_ID_SLOT], CHORD_MSG_DST_ID_SIZE);
+    *dst_id = (nodeid_t)ntohl(tmp);
   }
   if (size) {
-    memcpy(size, &buf[CHORD_MSG_LENGTH_SLOT], CHORD_MSG_LENGTH_SIZE);
+    memcpy(&tmp, &buf[CHORD_MSG_LENGTH_SLOT], CHORD_MSG_LENGTH_SIZE);
+    *size = (size_t)ntohl(tmp);
   }
   if (content) {
     *content = &buf[CHORD_HEADER_SIZE];
@@ -136,7 +147,7 @@ wait_for_message(struct node* node, struct socket_wrapper *s)
   }
   demarshal_msg(buf, &type, &src_id, &dst_id, &size, &content);
   DEBUG(INFO,
-        "Got %s Request with size %d from %d to %d\n",
+        "Got %s Request with size %u from %d to %d\n",
         msg_to_string(type),
         (int)size,
         src_id,

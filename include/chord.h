@@ -89,12 +89,12 @@ typedef int bool;
 #define CHORD_CHANGE_INTERVAL (5)
 #define CHORD_MSG_COMMAND_SLOT (0)
 #define CHORD_CHILD_TIMEOUT (3)
-#define CHORD_MSG_COMMAND_SIZE (sizeof(chord_msg_t))
-#define CHORD_MSG_SRC_ID_SIZE (sizeof(nodeid_t))
+#define CHORD_MSG_COMMAND_SIZE (sizeof(uint32_t))
+#define CHORD_MSG_SRC_ID_SIZE (sizeof(uint32_t))
 #define CHORD_MSG_SRC_ID_SLOT (CHORD_MSG_COMMAND_SLOT + CHORD_MSG_COMMAND_SIZE)
-#define CHORD_MSG_DST_ID_SIZE (sizeof(nodeid_t))
+#define CHORD_MSG_DST_ID_SIZE (sizeof(uint32_t))
 #define CHORD_MSG_DST_ID_SLOT (CHORD_MSG_SRC_ID_SLOT + CHORD_MSG_SRC_ID_SIZE)
-#define CHORD_MSG_LENGTH_SIZE (sizeof(size_t))
+#define CHORD_MSG_LENGTH_SIZE (sizeof(uint32_t))
 #define CHORD_MSG_LENGTH_SLOT (CHORD_MSG_DST_ID_SLOT + CHORD_MSG_DST_ID_SIZE)
 #define CHORD_HEADER_SIZE                                                      \
   (CHORD_MSG_COMMAND_SIZE + CHORD_MSG_LENGTH_SIZE + CHORD_MSG_DST_ID_SIZE +    \
@@ -244,6 +244,7 @@ typedef int(*chord_periodic_hook)(void *);
 
 struct hooks {
   chord_periodic_hook periodic_hook;
+  void* periodic_data;
 };
 
 int
