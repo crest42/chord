@@ -16,12 +16,9 @@ int sock_wrapper_close(struct socket_wrapper *wrapper) {
 }
 #endif
 
-int
-addr_to_node(struct node* node, const char *addr)
-{
-  assert(node);
-  assert(addr);
-  int ret = inet_pton(AF_INET6, addr, &(node->addr));
+
+int addr_to_bin(struct in6_addr *to, const char *from) {
+  int ret = inet_pton(AF_INET6, from, to);
   if (ret != 1) {
     if (ret == -1) {
       DEBUG(ERROR, "Error in inet_pton");
@@ -33,6 +30,14 @@ addr_to_node(struct node* node, const char *addr)
     return CHORD_ERR;
   }
   return CHORD_OK;
+}
+
+int
+addr_to_node(struct node* node, const char *addr)
+{
+  assert(node);
+  assert(addr);
+  return addr_to_bin(&node->addr, addr);
 }
 
 int

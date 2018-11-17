@@ -14,8 +14,11 @@ int sock_wrapper_open(struct socket_wrapper *wrapper,struct node *node,struct no
 int sock_wrapper_recv(struct socket_wrapper *wrapper,unsigned char *buf, size_t buf_size,int flags);
 int sock_wrapper_send(struct socket_wrapper *wrapper,unsigned char *buf, size_t buf_size);
 int sock_wrapper_close(struct socket_wrapper *wrapper);
+
 int
 addr_to_node(struct node* node, const char *addr);
+int
+addr_to_bin(struct in6_addr* to, const char* from);
 
 int
 demarshal_msg(unsigned char* buf,

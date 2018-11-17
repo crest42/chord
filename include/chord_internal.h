@@ -9,8 +9,9 @@ struct node successorlist[SUCCESSORLIST_SIZE];
 struct childs childs;
 struct aggregate stats;
 struct hooks hooks;
+struct bootstrap_list bslist;
 
-time_t start;
+time_t time_start;
 time_t atm;
 size_t read_b;
 size_t write_b;
@@ -23,6 +24,10 @@ get_hooks(void)
 
 struct aggregate *get_stats(void) {
   return &stats;
+}
+
+struct bootstrap_list *get_bslist(void) {
+  return &bslist;
 }
 
 struct node*

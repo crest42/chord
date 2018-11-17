@@ -18,7 +18,8 @@
 #include <stdio.h>
 #ifdef RIOT
 #include "net/sock/udp.h"
-#define TIMEOUT (2*US_PER_SEC)
+#define TIMEOUT_DEF (2*US_PER_SEC)
+#define TIMEOUT(y) (y*US_PER_SEC)
 #else
 #include <sys/socket.h>
 #define TIMEOUT (2)
@@ -81,6 +82,7 @@ typedef int bool;
 #define SUCCESSORLIST_SIZE CHORD_RING_BITS
 #define CHORD_PORT (6667)
 #define CHORD_TREE_CHILDS (2)
+#define CHORD_TREE_ROOT (CHORD_RING_SIZE/2)
 #define CHORD_OK (0)
 #define CHORD_ERR (-1)
 #define CHORD_PERIODIC_SLEEP (2)
@@ -161,6 +163,7 @@ typedef enum msg_type chord_msg_t;
  *
  * A Node is a member of the ring
  */
+
 struct node
 {
   nodeid_t id; /*!< Id of the node. The node id is the hashed ipv6 address of
@@ -181,6 +184,7 @@ struct socket_wrapper {
   sock_udp_t sock;
   sock_udp_ep_t remote;
   sock_udp_ep_t local;
+  bool any;
 };
 #else
 struct socket_wrapper {
@@ -344,6 +348,8 @@ struct node *get_own_node(void);
 
 struct aggregate *get_stats(void);
 
+struct bootstrap_list *get_bslist(void);
+
 struct childs *get_childs(void);
 
 struct hooks *get_hooks(void);
@@ -415,6 +421,9 @@ get_mod_of_hash(unsigned char* hash, int modulo);
 int
 init_chord(const char* addr);
 
+int
+chord_start(void);
+
 /**
  * \brief Add a Node to out Chord Ring
  *
@@ -450,8 +459,8 @@ int
 notify(struct node* target);
 
 /**
- * \brief  Function which needs to be invoked by a thread answer requests from other
- * nodes
+ * \brief  Function which needs to be invoked by a thread answer requests from
+ * other nodes
  *
  * Answer messages like get_successor and checks ring on incomming notify
  * messages
@@ -464,7 +473,8 @@ void*
 thread_wait_for_msg(void* n);
 
 /**
- * \brief  Function which needs to be invoked by a thread to stabilize the ring
+ * \brief  Function which needs to be invoked by a thread to stabilize the
+ * ring
  *
  * Stabilize the ring as needed by the chord protocoll and then sleeps
  * CHORD_PERIODIC_SLEEP seconds
@@ -477,7 +487,8 @@ void*
 thread_periodic(void* n);
 
 /**
- * \brief Print informations about a node, like it's id, successor and predecessor
+ * \brief Print informations about a node, like it's id, successor and
+ * predecessor
  *
  * @param verbose also print successorlist and fingertable
  * @return CHORD_OK if everything is fine CHORD_ERR otherwise
@@ -506,7 +517,7 @@ node_is_null(struct node* node);
 int
 chord_send_nonblock_sock(unsigned char* msg,
                          size_t size,
-                         struct socket_wrapper *s);
+                         struct socket_wrapper* s);
 /**
  * \brief Removes a failing node out of local data structures
  *
@@ -548,5 +559,5 @@ in_interval_id(nodeid_t start, nodeid_t end, nodeid_t test);
  * @return CHORD_OK on success, CHORD_ERR otherwise
  */
 int
-get_successorlist_id(struct node *target, nodeid_t *id);
+get_successorlist_id(struct node* target, nodeid_t* id);
 #endif

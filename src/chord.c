@@ -12,6 +12,7 @@
 #include "../include/chord.h"
 #include "../include/chord_internal.h"
 #include "../include/network.h"
+#include "../include/bootstrap.h"
 
 
 /* Static functions */
@@ -106,6 +107,7 @@ static inline uint32_t lg_up(uint32_t x) {
 }
 
 static int tree_granularity(int l) {
+  return 0;
   int x = l - lg_up(l) - 1;
   return (x < 0) ? 0 : x;
 }
@@ -178,12 +180,19 @@ static nodeid_t find_splitnode(struct node *target) {
         b = &list[i];
       }
       share = get_share(a, b);
-      if (share > max_share) {
+      if (share >= max_share) {
         max_share = share;
         max_id = i;
       }
     }
-    return list[max_id].id-(max_share/2);
+    nodeid_t split;
+    if (max_share == 0) {
+      max_share = get_share(&r, &r);
+      split = r.id;
+    } else {
+      split = list[max_id].id;
+    }
+    return split - (max_share / 2);
   }
 }
 
@@ -220,7 +229,7 @@ static int init_successorlist(void) {
 
 static nodeid_t parent_function(nodeid_t id) {
   int k = 2;
-  nodeid_t alpha = CHORD_RING_SIZE/2;
+  nodeid_t alpha = CHORD_TREE_ROOT;
   int a = (id - alpha);
   if(a < 0 && a > -CHORD_RING_SIZE) {
     a = (((a%CHORD_RING_SIZE)+CHORD_RING_SIZE)%CHORD_RING_SIZE);
@@ -228,7 +237,7 @@ static nodeid_t parent_function(nodeid_t id) {
     a = a % CHORD_RING_SIZE;
   }
 
-  if (a >= 0 && a <= CHORD_RING_SIZE/2) {
+  if (a >= 0 && a <= CHORD_TREE_ROOT) {
     return (alpha + (a/k)) % CHORD_RING_SIZE;
   } else if (a > CHORD_RING_SIZE / 2 && a <= CHORD_RING_SIZE) {
     return (alpha - ((CHORD_RING_SIZE - a) / k)) % CHORD_RING_SIZE;
@@ -464,7 +473,7 @@ static bool in_sync(void) {
 }
 
 static bool is_root(struct node *n, struct node *pre) {
-  return in_interval(pre,n,(CHORD_RING_SIZE/2)-1);
+  return in_interval(pre,n,CHORD_TREE_ROOT - 1);
 }
 
 static nodeid_t get_parent(struct child *c) {
@@ -590,6 +599,38 @@ static int aggregate(struct aggregate *aggregation) {
   return CHORD_OK;
 }
 
+static int
+start(struct node* node)
+{
+  if (node) {
+    if (CHORD_CHANGE_ID) {
+      set_nodeid(find_splitnode(node));
+    }
+
+    for (int i = 1; i <= 3 && (join(&mynode, node) == CHORD_ERR); i++) {
+      DEBUG(ERROR,
+            "Unable to join retry in %d seconds(%d/3)\n",
+            CHORD_PERIODIC_SLEEP,
+            i);
+      sleep(CHORD_PERIODIC_SLEEP);
+    }
+  } else {
+    if (CHORD_CHANGE_ID) {
+      set_nodeid(CHORD_RING_SIZE-1);
+    }
+    copy_node(&mynode, mynode.additional->successor);
+    DEBUG(INFO, "Create new chord ring %d\n", mynode.additional->successor->id);
+    for (int i = 0; i < FINGERTABLE_SIZE; i++) {
+      if (i > 0) {
+        copy_node(mynode.additional->successor, &fingertable[i].node);
+      }
+    }
+    memset(successorlist, 0, sizeof(successorlist));
+  }
+
+  return CHORD_OK;
+}
+
 /* Public functions */
 int
 copy_node(struct node* node, struct node* copy)
@@ -630,38 +671,6 @@ get_mod_of_hash(unsigned char* hash, int modulo)
 }
 
 int
-add_node(struct node* node)
-{
-  if (node) {
-    if (CHORD_CHANGE_ID) {
-      set_nodeid(find_splitnode(node));
-    }
-
-    for (int i = 1; i <= 3 && (join(&mynode, node) == CHORD_ERR); i++) {
-      DEBUG(ERROR,
-            "Unable to join retry in %d seconds(%d/3)\n",
-            CHORD_PERIODIC_SLEEP,
-            i);
-      sleep(CHORD_PERIODIC_SLEEP);
-    }
-  } else {
-    if (CHORD_CHANGE_ID) {
-      set_nodeid(CHORD_RING_SIZE-1);
-    }
-    copy_node(&mynode, mynode.additional->successor);
-    DEBUG(INFO, "Create new chord ring %d\n", mynode.additional->successor->id);
-    for (int i = 0; i < FINGERTABLE_SIZE; i++) {
-      if (i > 0) {
-        copy_node(mynode.additional->successor, &fingertable[i].node);
-      }
-    }
-    memset(successorlist, 0, sizeof(successorlist));
-  }
-
-  return CHORD_OK;
-}
-
-int
 remove_dead_node(nodeid_t id)
 {
   DEBUG(INFO, "Remove dead node %d\n", id);
@@ -678,16 +687,34 @@ remove_dead_node(nodeid_t id)
   return CHORD_OK;
 }
 
+int chord_start(void) {
+  if (bslist.curr > 0) {
+    for (uint32_t i = 0; i < bslist.size;i++) {
+      struct node tmp;
+      memcpy(&tmp.addr, &bslist.list[i], sizeof(struct in6_addr));
+      if(ping_node(&tmp) == CHORD_OK) {
+        start(&tmp);
+        break;
+      }
+    }
+  } else {
+    start(NULL);
+  }
+  return CHORD_OK;
+}
+
 int
-init_chord(const char* addr)
+init_chord(const char* local_addr)
 {
   memset(&mynode, 0, sizeof(mynode));
   memset(&my_additional, 0, sizeof(my_additional));
   memset(&predecessor, 0, sizeof(predecessor));
   memset(&childs, 0, sizeof(struct child));
-  start = time(NULL);
-  if (addr_to_node(&mynode, addr) == CHORD_ERR) {
-    DEBUG(ERROR, "Error while translating address %s to binary\n", addr);
+  memset(&bslist, 0, sizeof(struct bootstrap_list));
+  bslist.size = BSLIST_SIZE;
+  time_start = time(NULL);
+  if (addr_to_node(&mynode, local_addr) == CHORD_ERR) {
+    DEBUG(ERROR, "Error while translating address %s to binary\n", local_addr);
     return CHORD_ERR;
   }
 
@@ -743,8 +770,9 @@ chord_send_block_and_wait(struct node* target,
   size_t msg_size;
   unsigned char* msg_content;
   struct socket_wrapper sock;
-
-  int s = sock_wrapper_open(&sock,get_own_node(),target,CHORD_PORT+1,CHORD_PORT);
+  sock.any = false;
+  int s = sock_wrapper_open(
+    &sock, get_own_node(), target, CHORD_PORT + 1, CHORD_PORT);
   if (s == -1) {
     DEBUG(ERROR, "socket: %s\n", strerror(errno));
     return MSG_TYPE_CHORD_ERR;
@@ -769,8 +797,8 @@ chord_send_block_and_wait(struct node* target,
   chord_msg_t type = 0;
 
   DEBUG(DEBUG, "Wait for answer\n");
-  ret = sock_wrapper_recv(&sock,read_buf,MAX_MSG_SIZE,TIMEOUT);
-  DEBUG(INFO, "Got %d\n",ret);
+  ret = sock_wrapper_recv(&sock,read_buf,MAX_MSG_SIZE,TIMEOUT_DEF);
+  DEBUG(INFO, "Got %d\n", ret);
   if (ret < (int)CHORD_HEADER_SIZE) {
     DEBUG(ERROR,
           "Error in recv: %s (received) %d < (CHORD_HEADER_SIZE) %d\n",
@@ -791,15 +819,11 @@ chord_send_block_and_wait(struct node* target,
         (int)msg_size,
         msg_to_string(wait),
         wait);
-  if(size > MAX_MSG_SIZE) {
-    //HOTFIX https://github.com/RIOT-OS/RIOT/issues/10389
-    return CHORD_OK;
-  }
   assert((int)type >= 0);
   assert((int)src_id > 0);
   assert((int)dst_id > 0);
   assert((int)msg_size >= 0);
-  assert((int)msg_size < MAX_MSG_SIZE);
+  assert((int)size < MAX_MSG_SIZE);
   if (msg_size > bufsize) {
     msg_size = bufsize;
   }
@@ -978,7 +1002,10 @@ thread_wait_for_msg(void* n)
   int iteration = 0;
   struct node* node = (struct node*)n;
   struct socket_wrapper s;
-  if(sock_wrapper_open(&s,get_own_node(),NULL,CHORD_PORT,0) != 0) {
+  s.any = true;
+  struct node tmp;
+  addr_to_node(&tmp,"");
+  if (sock_wrapper_open(&s, get_own_node(), NULL, CHORD_PORT, 0) != 0) {
     DEBUG(ERROR,"Error while open new port\n");
     return NULL;
   }
@@ -996,9 +1023,8 @@ thread_wait_for_msg(void* n)
 void*
 thread_periodic(void* n)
 {
+  (void)n;
   int i = 0;
-  struct node partner;
-  copy_node((struct node*)n, &partner);
   struct node* node = &mynode;
   struct child c;
   memset(&c, 0, sizeof(c));
@@ -1006,7 +1032,7 @@ thread_periodic(void* n)
     struct hooks *h = get_hooks();
     atm = time(NULL);
     #ifdef DEBUG_ENABLE
-    time_t runtime = atm - start;
+    time_t runtime = atm - time_start;
     if(runtime > 1) {
       double read_s = read_b / runtime, write_s = write_b/runtime, overall_s = (read_b + write_b) / runtime;
       DEBUG(
@@ -1025,9 +1051,6 @@ thread_periodic(void* n)
     DEBUG(INFO, "%d: periodic run %d\n", node->id, i);
     assert(!node_is_null(mynode.additional->successor));
     assert(node->id > 0);
-    if (node_is_null(node->additional->successor)) {
-      // join(node, &partner);
-    }
     i++;
     assert(node->additional->successor);
     assert(node->additional->predecessor);
