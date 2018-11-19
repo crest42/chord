@@ -528,7 +528,7 @@ static int register_child(struct child *c){
                                    MSG_TYPE_REGISTER_CHILD_OK,
                                    (unsigned char*)ret,
                                    sizeof(ret),
-                                   &t);
+                                   NULL);
   memcpy(&c->parent_suc, ret, sizeof(struct node));
   } while (type == MSG_TYPE_REGISTER_CHILD_REDIRECT);
   if (type == MSG_TYPE_REGISTER_CHILD_OK) {
@@ -774,7 +774,7 @@ chord_send_block_and_wait(struct node* target,
 {
   unsigned char read_buf[MAX_MSG_SIZE];
   nodeid_t src_id, dst_id;
-  size_t msg_size;
+  uint32_t msg_size;
   unsigned char* msg_content;
   struct socket_wrapper sock;
   sock.any = false;

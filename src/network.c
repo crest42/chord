@@ -133,7 +133,7 @@ wait_for_message(struct node* node, struct socket_wrapper *s)
 {
   (void)node;
   chord_msg_t type;
-  size_t size;
+  uint32_t size;
   nodeid_t src_id, dst_id;
   unsigned char* content;
   unsigned char buf[MAX_MSG_SIZE];

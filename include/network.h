@@ -25,7 +25,7 @@ demarshal_msg(unsigned char* buf,
                chord_msg_t* type,
                nodeid_t* src_id,
                nodeid_t* dst_id,
-               size_t* size,
+               uint32_t* size,
                unsigned char** content);
 int
 marshal_msg(chord_msg_t msg_type,
@@ -36,6 +36,6 @@ marshal_msg(chord_msg_t msg_type,
 int
 add_msg_cont(unsigned char* data,
              unsigned char* to,
-             size_t size,
+             uint32_t size,
              size_t size_existing);
 #endif
