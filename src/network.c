@@ -49,12 +49,14 @@ chord_send_nonblock_sock(unsigned char* msg,
 }
 
 int
-add_msg_cont(unsigned char* data, unsigned char* to, size_t size,size_t size_existing) {
+add_msg_cont(unsigned char* data, unsigned char* to, uint32_t size,size_t size_existing) {
   assert(to);
   assert(data);
   assert(size > 0);
   assert(size_existing > 0);
-  size_t new = ((size_t)to[CHORD_MSG_LENGTH_SLOT]) + size;
+  uint32_t old = 0;
+  memcpy(&old, &to[CHORD_MSG_LENGTH_SLOT], sizeof(old));
+  uint32_t new = htonl(ntohl(old) + size);
   memcpy(&to[CHORD_MSG_LENGTH_SLOT], &new, CHORD_MSG_LENGTH_SIZE);
   memcpy(to + size_existing, data, size);
   return CHORD_OK;
@@ -99,7 +101,7 @@ demarshal_msg(unsigned char* buf,
                chord_msg_t* type,
                nodeid_t* src_id,
                nodeid_t* dst_id,
-               size_t* size,
+               uint32_t* size,
                unsigned char** content)
 {
   assert(buf);
@@ -118,7 +120,7 @@ demarshal_msg(unsigned char* buf,
   }
   if (size) {
     memcpy(&tmp, &buf[CHORD_MSG_LENGTH_SLOT], CHORD_MSG_LENGTH_SIZE);
-    *size = (size_t)ntohl(tmp);
+    *size = ntohl(tmp);
   }
   if (content) {
     *content = &buf[CHORD_HEADER_SIZE];
@@ -157,7 +159,10 @@ wait_for_message(struct node* node, struct socket_wrapper *s)
         (int)size,
         src_id,
         dst_id);
-
+  if(size > (unsigned int)ret) {
+    //assert(false);
+    return CHORD_OK;
+  }
   struct chord_callbacks *cc = get_callbacks();
   switch (type) {
     case MSG_TYPE_FIND_SUCCESSOR_LINEAR:
@@ -270,10 +275,10 @@ wait_for_message(struct node* node, struct socket_wrapper *s)
       break;
     case MSG_TYPE_COPY_SUCCESSORLIST: {
       struct node *successorlist = get_successorlist();
-      unsigned char msg[CHORD_HEADER_SIZE + (sizeof(struct node) * SUCCESSORLIST_SIZE)];
+      unsigned char msg[CHORD_HEADER_SIZE + (sizeof(struct node) *(SUCCESSORLIST_SIZE-1))];
       marshal_msg(MSG_TYPE_COPY_SUCCESSORLIST_RESP,
                    src_id,
-                    (sizeof(struct node) * SUCCESSORLIST_SIZE),
+                    (sizeof(struct node) * (SUCCESSORLIST_SIZE-1)),
                    (unsigned char*)successorlist,
                    msg);
       ret = chord_send_nonblock_sock(msg,

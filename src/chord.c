@@ -507,29 +507,32 @@ static int register_child(struct child *c){
   } while (c->parent_suc.id == mynode->id);
   unsigned char msg[CHORD_HEADER_SIZE + sizeof(struct child)];
   unsigned char ret[sizeof(struct node) + sizeof(struct aggregate)];
+
   do {
   DEBUG(INFO,
-        "Register Child P^%d(%d) = %d on %d\n",
+        "Register Child P^%d(%d) = %d on %d with size: %d and node: %d\n",
         c->i,
         get_own_node()->id,
         c->parent,
-        c->parent_suc.id);
+        c->parent_suc.id,
+        c->aggregation.available,
+        c->aggregation.nodes);
   marshal_msg(MSG_TYPE_REGISTER_CHILD,
                c->parent_suc.id,
                sizeof(struct child),
                (unsigned char*)c,
                msg);
   type = chord_send_block_and_wait(&c->parent_suc,
-                                     msg,
-                                     CHORD_HEADER_SIZE + sizeof(struct node) + sizeof(struct aggregate),
-                                     MSG_TYPE_REGISTER_CHILD_OK,
-                                     (unsigned char*)&ret,
-                                     sizeof(ret),
-                                     NULL);
-  memcpy(&c->parent_suc, &ret, sizeof(struct node));
-  memcpy(get_stats(), ret + sizeof(struct node), sizeof(struct aggregate));
+                                   msg,
+                                   sizeof(msg),
+                                   MSG_TYPE_REGISTER_CHILD_OK,
+                                   (unsigned char*)ret,
+                                   sizeof(ret),
+                                   &t);
+  memcpy(&c->parent_suc, ret, sizeof(struct node));
   } while (type == MSG_TYPE_REGISTER_CHILD_REDIRECT);
   if (type == MSG_TYPE_REGISTER_CHILD_OK) {
+    memcpy(get_stats(), ret + sizeof(struct node), sizeof(struct aggregate));
     return CHORD_OK;
   } else {
     c->parent = 0;
@@ -553,10 +556,10 @@ static int refresh_parent(struct child *c) {
                               msg,
                               CHORD_HEADER_SIZE + sizeof(struct child),
                               MSG_TYPE_REFRESH_CHILD_OK,
-                              (unsigned char*)&ret,
+                              (unsigned char*)ret,
                               sizeof(ret),
                               NULL);
-    memcpy(&c->parent_suc, &ret, sizeof(struct node));
+    memcpy(&c->parent_suc, ret, sizeof(struct node));
     memcpy(get_stats(), (ret)+sizeof(struct node), sizeof(struct aggregate));
   if(type == MSG_TYPE_REFRESH_CHILD_REDIRECT) {
     register_child(c);
@@ -565,6 +568,7 @@ static int refresh_parent(struct child *c) {
   }
   return CHORD_ERR;
 }
+
 #ifdef DEBUG_ENABLE
 static int get_nodes(void) {
   return get_stats()->nodes;
@@ -583,8 +587,9 @@ static int aggregate(struct aggregate *aggregation) {
   int nodes = 0, available = 0, used = 0;
   struct childs* childs = get_childs();
   time_t systime = time(NULL);
+  memset(aggregation, 0, sizeof(struct aggregate));
   for (int i = 0; i < CHORD_TREE_CHILDS; i++) {
-    if (childs->child[i].child != 0 && (systime-(childs->child[i].t)) < 3) {
+    if (childs->child[i].child != 0 && (systime-(childs->child[i].t)) <= 6) {
       int n = childs->child[i].aggregation.nodes,
           a = childs->child[i].aggregation.available,
           u = childs->child[i].aggregation.used;
@@ -635,6 +640,8 @@ start(struct node* node)
 int
 copy_node(struct node* node, struct node* copy)
 {
+  assert(node);
+  assert(copy);
   memcpy(copy, node, sizeof(struct node));
   assert(copy->id == node->id);
   assert(memcmp(&node->addr,&copy->addr,sizeof(node->addr)) == 0);
@@ -810,7 +817,7 @@ chord_send_block_and_wait(struct node* target,
   }
 
   demarshal_msg(read_buf, &type, &src_id, &dst_id, &msg_size, &msg_content);
-  DEBUG(DEBUG,
+  DEBUG(INFO,
         "Found Msg type %s (%d) from %d to %d size %d. Wait for: %s (%d)\n",
         msg_to_string(type),
         type,
@@ -823,7 +830,7 @@ chord_send_block_and_wait(struct node* target,
   assert((int)src_id > 0);
   assert((int)dst_id > 0);
   assert((int)msg_size >= 0);
-  assert((int)size < MAX_MSG_SIZE);
+  assert((int)msg_size <= MAX_MSG_SIZE);
   if (msg_size > bufsize) {
     msg_size = bufsize;
   }
