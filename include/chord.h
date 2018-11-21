@@ -193,17 +193,6 @@ struct socket_wrapper {
 };
 #endif
 
-struct key
-{
-  nodeid_t id; /*!< Id of the key. The node id is the hashed ipv6 address of
-                  the node modulo the ring size */
-  uint32_t block;
-  uint32_t size;
-  unsigned char hash[20];
-  unsigned char* data;
-  struct key* next;
-};
-
 struct aggregate{
   int nodes;
   int available;
@@ -315,8 +304,6 @@ struct chord_callbacks
 
 struct chord_callbacks*
 get_callbacks(void);
-struct key**
-get_first_key(void);
 
 int
 chord_send_block_and_wait(struct node* target,
@@ -560,4 +547,10 @@ in_interval_id(nodeid_t start, nodeid_t end, nodeid_t test);
  */
 int
 get_successorlist_id(struct node* target, nodeid_t* id);
+
+void
+chord_mutex_lock(void);
+
+void
+chord_mutex_unlock(void);
 #endif

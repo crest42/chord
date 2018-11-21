@@ -202,7 +202,7 @@ pop_successor(struct node* next)
   int i = 0;
   do {
     copy_node(&successorlist[0], next);
-    memcpy(&successorlist[0],
+    memmove(&successorlist[0],
            &successorlist[1],
            sizeof(successorlist) - sizeof(struct node));
     memset(&successorlist[SUCCESSORLIST_SIZE - 1], 0, sizeof(struct node));
@@ -493,6 +493,7 @@ static nodeid_t get_parent(struct child *c) {
 static int register_child(struct child *c){
   assert(c);
   struct child new;
+  memset(&new, 0, sizeof(new));
   get_parent(&new);
   if(false && new.parent == c->parent) {
     return CHORD_OK;
@@ -697,7 +698,7 @@ remove_dead_node(nodeid_t id)
 int chord_start(void) {
   if (bslist.curr > 0) {
     for (uint32_t i = 0; i < bslist.size;i++) {
-      struct node tmp;
+      struct node tmp = {.id = CHORD_RING_SIZE, .additional = NULL, .size = 0, .used  = 0};
       memcpy(&tmp.addr, &bslist.list[i], sizeof(struct in6_addr));
       if(ping_node(&tmp) == CHORD_OK) {
         start(&tmp);
@@ -772,6 +773,7 @@ chord_send_block_and_wait(struct node* target,
                           size_t bufsize,
                           size_t *ret_size)
 {
+    chord_mutex_lock();
   unsigned char read_buf[MAX_MSG_SIZE];
   nodeid_t src_id, dst_id;
   uint32_t msg_size;
@@ -792,19 +794,23 @@ chord_send_block_and_wait(struct node* target,
     if (tmp < 0) {
       DEBUG(ERROR, "write: %s", strerror(errno));
       sock_wrapper_close(&sock);
+      chord_mutex_unlock();
       return MSG_TYPE_CHORD_ERR;
     }
     ret += tmp;
   }
   if (wait == MSG_TYPE_NO_WAIT) {
     sock_wrapper_close(&sock);
+    chord_mutex_unlock();
     return MSG_TYPE_NO_WAIT;
   }
 
   chord_msg_t type = 0;
 
   DEBUG(DEBUG, "Wait for answer\n");
+
   ret = sock_wrapper_recv(&sock,read_buf,MAX_MSG_SIZE,TIMEOUT_DEF);
+
   DEBUG(INFO, "Got %d\n", ret);
   if (ret < (int)CHORD_HEADER_SIZE) {
     DEBUG(ERROR,
@@ -813,9 +819,9 @@ chord_send_block_and_wait(struct node* target,
           ret,
           CHORD_HEADER_SIZE);
     sock_wrapper_close(&sock);
+    chord_mutex_unlock();
     return MSG_TYPE_CHORD_ERR;
   }
-
   demarshal_msg(read_buf, &type, &src_id, &dst_id, &msg_size, &msg_content);
   DEBUG(INFO,
         "Found Msg type %s (%d) from %d to %d size %d. Wait for: %s (%d)\n",
@@ -838,6 +844,7 @@ chord_send_block_and_wait(struct node* target,
   if(ret_size)
     *ret_size = msg_size;
   sock_wrapper_close(&sock);
+  chord_mutex_unlock();
   return type;
 }
 
@@ -1022,6 +1029,7 @@ thread_wait_for_msg(void* n)
     if (wait_for_message(node, &s) == CHORD_ERR) {
       DEBUG(ERROR, "error in wait_for_message\n");
     }
+    thread_yield();
   }
   return NULL;
 }
