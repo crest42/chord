@@ -62,7 +62,9 @@ handle_ping(chord_msg_t type,
 {
   assert(msg_size > 0);
   assert(type == MSG_TYPE_PING);
-  struct node *mynode = get_own_node();
+  (void)type;
+  (void)msg_size;
+  struct node* mynode = get_own_node();
   (void)data;
   unsigned char msg[CHORD_HEADER_SIZE + sizeof(nodeid_t)];
   marshal_msg(
@@ -77,6 +79,8 @@ handle_refresh_child(chord_msg_t type,
             struct socket_wrapper *s,
             size_t msg_size)
 {
+  (void)type;
+  (void)msg_size;
   assert(type == MSG_TYPE_REFRESH_CHILD);
   assert(msg_size > 0);
   struct child* c = (struct child*)data;
@@ -112,6 +116,8 @@ handle_register_child(chord_msg_t type,
   assert(type == MSG_TYPE_REGISTER_CHILD);
   assert(msg_size > 0);
   assert(src > 0);
+    (void)type;
+  (void)msg_size;
   struct child* c = (struct child*)data;
   struct node *mynode = get_own_node(), *retnode = mynode;
   struct childs* childs = get_childs();
@@ -183,6 +189,8 @@ handle_exit(chord_msg_t type,
   assert(msg_size > 0);
   assert(type == MSG_TYPE_EXIT);
   assert(data);
+  (void)type;
+  (void)msg_size;
   struct node *mynode = get_own_node();
   assert(mynode);
   struct node* update = (struct node*)data;
@@ -210,6 +218,8 @@ handle_find_successor(chord_msg_t type,
   assert(type == MSG_TYPE_FIND_SUCCESSOR ||
          type == MSG_TYPE_FIND_SUCCESSOR_LINEAR);
   assert(msg_size > 0);
+  (void)type;
+  (void)msg_size;
   struct node *mynode = get_own_node();
   assert(mynode);
   nodeid_t req_id;
@@ -244,6 +254,9 @@ handle_get_predecessor(chord_msg_t type,
             struct socket_wrapper *s,
             size_t msg_size)
 {
+  (void)type;
+  (void)msg_size;
+  (void)data;
   assert(type == MSG_TYPE_GET_PREDECESSOR);
   assert(!data);
   assert(msg_size == 0);
@@ -271,6 +284,8 @@ handle_notify(chord_msg_t type,
             struct socket_wrapper *s,
             size_t msg_size)
 {
+  (void)type;
+  (void)msg_size;
   assert(type == MSG_TYPE_NOTIFY);
   assert(msg_size == sizeof(struct node));
   (void)src;
