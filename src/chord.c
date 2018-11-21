@@ -773,7 +773,6 @@ chord_send_block_and_wait(struct node* target,
                           size_t bufsize,
                           size_t *ret_size)
 {
-    chord_mutex_lock();
   unsigned char read_buf[MAX_MSG_SIZE];
   nodeid_t src_id, dst_id;
   uint32_t msg_size;
@@ -794,14 +793,12 @@ chord_send_block_and_wait(struct node* target,
     if (tmp < 0) {
       DEBUG(ERROR, "write: %s", strerror(errno));
       sock_wrapper_close(&sock);
-      chord_mutex_unlock();
       return MSG_TYPE_CHORD_ERR;
     }
     ret += tmp;
   }
   if (wait == MSG_TYPE_NO_WAIT) {
     sock_wrapper_close(&sock);
-    chord_mutex_unlock();
     return MSG_TYPE_NO_WAIT;
   }
 
@@ -819,7 +816,6 @@ chord_send_block_and_wait(struct node* target,
           ret,
           CHORD_HEADER_SIZE);
     sock_wrapper_close(&sock);
-    chord_mutex_unlock();
     return MSG_TYPE_CHORD_ERR;
   }
   demarshal_msg(read_buf, &type, &src_id, &dst_id, &msg_size, &msg_content);
@@ -844,7 +840,6 @@ chord_send_block_and_wait(struct node* target,
   if(ret_size)
     *ret_size = msg_size;
   sock_wrapper_close(&sock);
-  chord_mutex_unlock();
   return type;
 }
 
