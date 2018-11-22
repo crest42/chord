@@ -86,7 +86,7 @@ update_successorlist(struct node* src)
 
 
 static int
-get_predecessor(struct node* target, struct node* pre)
+request_predecessor(struct node* target, struct node* pre)
 {
   unsigned char msg[CHORD_HEADER_SIZE];
   marshal_msg(MSG_TYPE_GET_PREDECESSOR,
@@ -153,12 +153,13 @@ static nodeid_t get_share(struct node *node, struct node *successor) {
 static nodeid_t find_splitnode(struct node *target) {
 
   struct node r, pre;
-  memset(&r,0,sizeof(r)),
-  memset(&pre,0,sizeof(pre)),
+  (void)memset(&r, 0, sizeof(r));
+  (void)memset(&pre, 0, sizeof(pre));
+  int i = 0, set = 0;
   find_successor(target, &r, mynode.id);
   struct node list[CHORD_RING_BITS];
   (void)memset(list, 0, sizeof(list));
-  for (int i = 0; i < CHORD_RING_BITS; i++) {
+  for (i = 0; i < CHORD_RING_BITS; i++) {
     if(i == 0) {
       find_successor(&r, &list[i], r.id);
       if(list[i].id == r.id) {
@@ -171,7 +172,6 @@ static nodeid_t find_splitnode(struct node *target) {
       }
     }
   }
-  int i, set = 0;
   for (i = 0; i < CHORD_RING_BITS; i++) {
     if (list[i].id != 0 && nodes_share_n_bits(r.id,list[i].id,tree_granularity(CHORD_RING_BITS))) {
       set++;
@@ -180,7 +180,7 @@ static nodeid_t find_splitnode(struct node *target) {
   nodeid_t share;
   assert(CHORD_RING_BITS >= tree_granularity(CHORD_RING_BITS));
   if (set >= 1 << (uint32_t)(CHORD_RING_BITS - tree_granularity(CHORD_RING_BITS))) {
-    get_predecessor(&r, &pre);
+    request_predecessor(&r, &pre);
     if(pre.id < r.id) {
       share = r.id - pre.id;
     } else {
@@ -275,38 +275,38 @@ stabilize(struct node* node)
 {
   struct node pre;
   int ret = CHORD_OK;
-  if (!node_is_null(node->additional->successor)) {
+  if (!node_is_null(my_additional.successor)) {
     (void)memset(&pre, 0, sizeof(pre));
-    ret = get_predecessor(node->additional->successor, &pre);
+    ret = request_predecessor(my_additional.successor, &pre);
     DEBUG(INFO,
           "got pre %d\n",
           (int)pre.id);
     if(pre.id == mynode.id && memcmp(&pre.addr,&mynode.addr,sizeof(pre.addr)) != 0) {
       set_nodeid(find_splitnode(node));
-      find_successor(node, mynode.additional->successor, mynode.id);
+      find_successor(node, my_additional.successor, mynode.id);
       return CHORD_ERR;
     }
     if (ret != CHORD_ERR) {
       if (!node_is_null(&pre)) {
-        if (node->id != pre.id && in_interval(node, node->additional->successor, pre.id)) {
+        if (node->id != pre.id && in_interval(node, my_additional.successor, pre.id)) {
           DEBUG(INFO,
                 "looks like me->suc->pre is new: %d old: %d me: %d\n",
                 pre.id,
-                mynode.additional->successor->id,
+                my_additional.successor->id,
                 mynode.id);
-          if (pre.id != mynode.additional->successor->id) {
+          if (pre.id != my_additional.successor->id) {
             copy_node(&pre, &fingertable[0].node);
-            update_successorlist(mynode.additional->successor);
-            DEBUG(INFO, "Update successor to %d\n", mynode.additional->successor->id);
+            update_successorlist(my_additional.successor);
+            DEBUG(INFO, "Update successor to %d\n", my_additional.successor->id);
           }
         } else {
           DEBUG(DEBUG, "looks like me->suc->pre stays the same\n");
         }
       } else {
-        (void)memcpy(node->additional->predecessor, node->additional->successor, sizeof(struct node));
+        (void)memcpy(my_additional.predecessor, my_additional.successor, sizeof(struct node));
       }
-      if (!node_is_null(mynode.additional->successor)) {
-        notify(mynode.additional->successor);
+      if (!node_is_null(my_additional.successor)) {
+        notify(my_additional.successor);
       }
     } else {
       DEBUG(ERROR, "Could not reach successor\n");
@@ -337,10 +337,6 @@ is_finger(struct node* n, struct fingertable_entry* entry)
 static void
 fix_fingers(struct node* node)
 {
-  if (!node->additional->successor) {
-    return;
-  }
-
   // TODO: Not really sure if we want to ommit our successor.
   nodeid_t i = 0;
   do {
@@ -349,12 +345,12 @@ fix_fingers(struct node* node)
   struct fingertable_entry* f = &fingertable[i];
 
   DEBUG(INFO, "Fix finger %d\n", i);
-  if (node->additional->successor != NULL && !node_is_null(node->additional->successor) &&
-      (node->id != node->additional->successor->id)) {
+  if (my_additional.successor != NULL && !node_is_null(my_additional.successor) &&
+      (node->id != my_additional.successor->id)) {
     DEBUG(DEBUG,
           "Fix fingers find successor for %d ask: %d\n",
           f->start,
-          node->additional->successor->id);
+          my_additional.successor->id);
 
     nodeid_t id = ((f->start + f->interval) % CHORD_RING_SIZE);
     find_successor(node, &f->node, id);
@@ -408,17 +404,17 @@ ping_node(struct node* node)
 }
 
 static bool
-check_predecessor(struct node* node)
+check_predecessor(void)
 {
-  DEBUG(INFO, "check pre %d\n", node->additional->predecessor->id);
-  return ping_node(node->additional->predecessor);
+  DEBUG(INFO, "check pre %d\n", my_additional.predecessor->id);
+  return ping_node(my_additional.predecessor);
 }
 
 static bool
-check_successor(struct node* node)
+check_successor(void)
 {
-  DEBUG(INFO, "check suc %d\n", node->additional->successor->id);
-  return ping_node(node->additional->successor);
+  DEBUG(INFO, "check suc %d\n", my_additional.successor->id);
+  return ping_node(my_additional.successor);
 }
 
 /*
@@ -456,10 +452,10 @@ send_exit(struct node* node, struct node* update)
 static int
 node_exit(struct node* node)
 {
-  if (node->additional->successor && !node_is_null(node->additional->successor)) {
+  if (my_additional.successor && !node_is_null(my_additional.successor)) {
     struct node* update;
-    if (node->additional->predecessor && !node_is_null(node->additional->predecessor)) {
-      update = node->additional->predecessor;
+    if (my_additional.predecessor && !node_is_null(my_additional.predecessor)) {
+      update = my_additional.predecessor;
     } else {
       update = &null_node;
     }
@@ -467,28 +463,28 @@ node_exit(struct node* node)
           "send exit to successor %d. Update node is %d\n",
           node->additional->successor->id,
           update->id);
-    send_exit(node->additional->successor, update);
+    send_exit(my_additional.successor, update);
   }
-  if (node->additional->predecessor && !node_is_null(node->additional->predecessor)) {
+  if (my_additional.predecessor && !node_is_null(my_additional.predecessor)) {
     struct node* update;
-    if (node->additional->successor && !node_is_null(node->additional->successor)) {
-      update = node->additional->successor;
+    if (my_additional.successor && !node_is_null(my_additional.successor)) {
+      update = my_additional.successor;
     } else {
       update = &null_node;
     }
     DEBUG(INFO,
           "send exit to predeccessor %d. Update node is %d\n",
-          node->additional->predecessor->id,
+          my_additional.predecessor->id,
           update->id);
 
-    send_exit(node->additional->predecessor, update);
+    send_exit(my_additional.predecessor, update);
   }
   return CHORD_OK;
-}*/
-
+}
+*/
 
 static bool in_sync(void) {
-  if (!node_is_null(self->additional->successor) && !node_is_null(self->additional->predecessor)) {
+  if (!node_is_null(my_additional.successor) && !node_is_null(my_additional.predecessor)) {
     return true;
   }
   return false;
@@ -508,7 +504,7 @@ static int get_parent(struct child *c) {
     if(tmp != c->parent) {
       c->i++;
     }
-  } while (in_interval(mynode.additional->predecessor,&mynode,c->parent-1));
+  } while (in_interval(my_additional.predecessor,&mynode,c->parent-1));
   return CHORD_OK;
 }
 
@@ -528,7 +524,7 @@ static int register_child(struct child *c){
   }
   chord_msg_t type = MSG_TYPE_CHORD_ERR;
   do {
-    find_successor(self->additional->predecessor, &c->parent_suc, c->parent - 1);
+    find_successor(my_additional.predecessor, &c->parent_suc, c->parent - 1);
   } while (c->parent_suc.id == self->id);
   unsigned char msg[CHORD_HEADER_SIZE + sizeof(struct child)];
   unsigned char ret[sizeof(struct node) + sizeof(struct aggregate)];
@@ -564,7 +560,6 @@ static int register_child(struct child *c){
     DEBUG(DEBUG, "get msg type %s\n", msg_to_string(type));
     return type;
   }
-  return CHORD_OK;
 }
 
 static int refresh_parent(struct child *c) {
@@ -609,13 +604,13 @@ static int get_size(void) {
 #endif
 
 static int aggregate(struct aggregate *aggregation) {
-  int nodes = 0, available = 0, used = 0;
+  uint32_t nodes = 0, available = 0, used = 0;
   struct childs* c = &childs;
   time_t systime = time(NULL);
   (void)memset(aggregation, 0, sizeof(struct aggregate));
   for (int i = 0; i < CHORD_TREE_CHILDS; i++) {
     if (c->child[i].child != 0 && (systime-(c->child[i].t)) <= 6) {
-      int n = c->child[i].aggregation.nodes,
+      uint32_t n = c->child[i].aggregation.nodes,
           a = c->child[i].aggregation.available,
           u = c->child[i].aggregation.used;
       (n > 0) ? nodes += n : nodes++;
@@ -637,7 +632,7 @@ start(/*@NULL@*/ struct node* node)
       set_nodeid(find_splitnode(node));
     }
 
-    for (int i = 1; i <= 3 && (join(&mynode, node) == CHORD_ERR); i++) {
+    for (int i = 1; i <= 3 && (join(node) == CHORD_ERR); i++) {
       DEBUG(ERROR,
             "Unable to join retry in %d seconds(%d/3)\n",
             CHORD_PERIODIC_SLEEP,
@@ -646,13 +641,13 @@ start(/*@NULL@*/ struct node* node)
     }
   } else {
     if (CHORD_CHANGE_ID) {
-      set_nodeid(CHORD_RING_SIZE-1);
+      set_nodeid((nodeid_t)(CHORD_RING_SIZE-1));
     }
-    copy_node(&mynode, mynode.additional->successor);
-    DEBUG(INFO, "Create new chord ring %d\n", mynode.additional->successor->id);
+    copy_node(&mynode, my_additional.successor);
+    DEBUG(INFO, "Create new chord ring %d\n", my_additional.successor->id);
     for (int i = 0; i < FINGERTABLE_SIZE; i++) {
       if (i > 0) {
-        copy_node(mynode.additional->successor, &fingertable[i].node);
+        copy_node(my_additional.successor, &fingertable[i].node);
       }
     }
     (void)memset(successorlist, 0, sizeof(successorlist));
@@ -664,6 +659,14 @@ start(/*@NULL@*/ struct node* node)
 /* Public functions */
 struct node *get_own_node(void) {
   return self;
+}
+
+struct node *get_successor(void) {
+  return my_additional.successor;
+}
+
+struct node *get_predecessor(void) {
+  return my_additional.predecessor;
 }
 
 struct hooks *get_hooks(void) {
@@ -736,7 +739,7 @@ remove_dead_node(nodeid_t id)
 int chord_start(void) {
   if (bslist.curr > 0) {
     for (uint32_t i = 0; i < bslist.size;i++) {
-      struct node tmp = {.id = CHORD_RING_SIZE, .additional = NULL, .size = 0, .used  = 0};
+      struct node tmp = {.id = CHORD_RING_SIZE, .size = 0, .used  = 0};
       memcpy(&tmp.addr, &bslist.list[i], sizeof(tmp.addr));
       if(ping_node(&tmp) == CHORD_OK) {
         start(&tmp);
@@ -773,8 +776,7 @@ init_chord(const char* local_addr)
 
   my_additional.predecessor = &predecessor;
   my_additional.successor = &fingertable[0].node;
-  mynode.additional = &my_additional;
-
+ 
   init_fingertable();
   init_successorlist();
 
@@ -784,9 +786,7 @@ init_chord(const char* local_addr)
   a->used = 0;
   a->nodes = 0;
 
-  struct hooks *h = get_hooks();
-  assert(h != NULL);
-  h->periodic_hook = NULL;
+  hooks.periodic_hook = NULL;
 
   return CHORD_OK;
 }
@@ -986,8 +986,8 @@ int
 find_successor(struct node* target, struct node* ret, nodeid_t id)
 {
   assert(id <= (nodeid_t)CHORD_RING_SIZE);
-  if (!node_is_null(self->additional->predecessor) &&
-      in_interval(self->additional->predecessor, self, id)) {
+  if (!node_is_null(my_additional.predecessor) &&
+      in_interval(my_additional.predecessor, self, id)) {
     copy_node(self,ret);
     return CHORD_OK;
   } else {
@@ -1025,18 +1025,18 @@ notify(struct node* target)
 }
 
 int
-join(struct node* src, struct node* target)
+join(struct node* target)
 {
-  (void)memset(src->additional->predecessor, 0, sizeof(struct node));
-  if (find_successor(target, src->additional->successor, src->id) == CHORD_ERR) {
+  (void)memset(my_additional.predecessor, 0, sizeof(struct node));
+  if (find_successor(target, my_additional.successor, self->id) == CHORD_ERR) {
     return CHORD_ERR;
   }
-  if (node_is_null(src->additional->successor)) {
+  if (node_is_null(my_additional.successor)) {
     DEBUG(ERROR, "Unable to find successor exit\n");
     return CHORD_ERR;
   }
   DEBUG(INFO, "Update successorlist\n");
-  update_successorlist(src->additional->successor);
+  update_successorlist(my_additional.successor);
   return CHORD_OK;
 }
 
@@ -1093,6 +1093,8 @@ thread_wait_for_msg(void* n)
     }
     thread_yield();
   }
+
+  /*@notreached@*/
   return NULL;
 }
 
@@ -1106,7 +1108,6 @@ thread_periodic(void* n)
   struct child c;
   (void)memset(&c, 0, sizeof(c));
   while (true) {
-    struct hooks *h = get_hooks();
     atm = time(NULL);
     #ifdef DEBUG_ENABLE
     time_t runtime = atm - time_start;
@@ -1126,18 +1127,16 @@ thread_periodic(void* n)
     #endif
     c.child = mynode.id;
     DEBUG(INFO, "%d: periodic run %d\n", node->id, i);
-    assert(!node_is_null(mynode.additional->successor));
+    assert(!node_is_null(my_additional.successor));
     assert(node->id > 0);
     i++;
-    assert(node->additional->successor != NULL);
-    assert(node->additional->predecessor != NULL);
 
     DEBUG(INFO, "Start stabilization Procedure\n");
     nodeid_t old = mynode.id;
     if (stabilize(node) == CHORD_OK) {
-      if (!node_is_null(node->additional->successor)) {
+      if (!node_is_null(my_additional.successor)) {
         DEBUG(INFO, "Update successorlist\n");
-        update_successorlist(node->additional->successor);
+        update_successorlist(my_additional.successor);
       }
     } else {
       if(old != mynode.id) {
@@ -1146,26 +1145,26 @@ thread_periodic(void* n)
       DEBUG(ERROR, "Error in stabilization Procedure: %d\n");
     }
 
-    if (!node_is_null(node->additional->predecessor) && !check_predecessor(node)) {
+    if (!node_is_null(my_additional.predecessor) && !check_predecessor()) {
       DEBUG(
-        ERROR, "ERROR PRE %d Do not respond to ping\n", node->additional->predecessor->id);
-      remove_dead_node(node->additional->predecessor->id);
-      (void)memset(node->additional->predecessor, 0, sizeof(struct node));
+        ERROR, "ERROR PRE %d Do not respond to ping\n", my_additional.predecessor->id);
+      remove_dead_node(my_additional.predecessor->id);
+      (void)memset(my_additional.predecessor, 0, sizeof(struct node));
     }
 
-    if (!node_is_null(node->additional->successor) && !check_successor(node)) {
+    if (!node_is_null(my_additional.successor) && !check_successor()) {
       DEBUG(
-        ERROR, "Error: suc %d do not respond to ping\n", node->additional->successor->id);
-      remove_dead_node(node->additional->successor->id);
-      pop_successor(node->additional->successor);
-      DEBUG(INFO, "Update successor to %d\n", node->additional->successor->id);
+        ERROR, "Error: suc %d do not respond to ping\n", my_additional.successor->id);
+      remove_dead_node(my_additional.successor->id);
+      pop_successor(my_additional.successor);
+      DEBUG(INFO, "Update successor to %d\n", my_additional.successor->id);
     }
 
 
     DEBUG(INFO, "Aggregate Stats\n");
     aggregate(&c.aggregation);
-    if (!is_root(&mynode, mynode.additional->predecessor)) {
-      if (!node_is_null(node->additional->predecessor) && !node_is_null(node->additional->successor)) {
+    if (!is_root(&mynode, my_additional.predecessor)) {
+      if (!node_is_null(my_additional.predecessor) && !node_is_null(my_additional.successor)) {
         register_child(&c);
       }
       if(!node_is_null(&c.parent_suc)) {
@@ -1182,9 +1181,9 @@ thread_periodic(void* n)
             get_size());
     }
 
-    if (in_sync() && h->periodic_hook != NULL) {
+    if (in_sync() && hooks.periodic_hook != NULL) {
       DEBUG(INFO, "Call periodic Hook\n");
-      h->periodic_hook(h->periodic_data);
+      hooks.periodic_hook(hooks.periodic_data);
     }
 
     fix_fingers(node);
@@ -1194,5 +1193,6 @@ thread_periodic(void* n)
 #endif
     sleep(CHORD_PERIODIC_SLEEP);
   }
+  /*@notreached@*/
   return NULL;
 }

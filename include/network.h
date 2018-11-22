@@ -32,7 +32,7 @@ marshal_msg(chord_msg_t msg_type,
              nodeid_t dst_id,
              size_t size,
              /*@null@*/ unsigned char* content,
-             unsigned char* msg);
+             /*@out@*/ unsigned char* msg);
 int
 add_msg_cont(unsigned char* data,
              unsigned char* to,

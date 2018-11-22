@@ -31,7 +31,6 @@ struct chord_callbacks *get_callbacks(void) {
 }
 
 struct node null_node = { .id = 0,
-                          .additional = NULL,
                           .size = 0,
                           .used = 0
                         };

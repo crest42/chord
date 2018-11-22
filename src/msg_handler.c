@@ -9,10 +9,10 @@ static bool
 is_pre(nodeid_t id)
 {
   assert(self);
-  if (node_is_null(self->additional->predecessor)) {
+  if (node_is_null(get_predecessor())) {
     return true;
   }
-  if (in_interval(self->additional->predecessor, self, id)) {
+  if (in_interval(get_predecessor(), self, id)) {
     return true;
   }
   return false;
@@ -124,8 +124,8 @@ handle_register_child(chord_msg_t type,
       ret = MSG_TYPE_REGISTER_CHILD_OK;
       overloaded = false;
     } else {
-      if(!node_is_null(self->additional->predecessor)) {
-        retnode = self->additional->predecessor;
+      if(!node_is_null(get_predecessor())) {
+        retnode = get_predecessor();
         ret = MSG_TYPE_REGISTER_CHILD_REDIRECT;
         overloaded = false;
       } else {
@@ -155,12 +155,12 @@ handle_exit(chord_msg_t type,
   struct node* update = (struct node*)data;
   memcpy(update, data, sizeof(struct node));
   remove_dead_node(update->id);
-  if (src == self->additional->successor->id && update->id != self->id &&
+  if (src == get_successor()->id && update->id != self->id &&
       !node_is_null(update)) {
-    copy_node(update, self->additional->successor);
-  } else if (src == self->additional->predecessor->id && update->id != self->id &&
+    copy_node(update, get_successor());
+  } else if (src == get_predecessor()->id && update->id != self->id &&
              !node_is_null(update)) {
-    copy_node(update, self->additional->predecessor);
+    copy_node(update, get_predecessor());
   }
   unsigned char msg[CHORD_HEADER_SIZE];
   marshal_msg(MSG_TYPE_EXIT_ACK, src, 0, NULL, msg);
@@ -186,16 +186,16 @@ handle_find_successor(chord_msg_t type,
   DEBUG(DEBUG, "req_id is %d my_id is %d from %d\n", req_id, self->id, src);
   struct node successor;
   memset(&successor, 0, sizeof(successor));
-  if (!node_is_null(self->additional->successor) &&
-             in_interval(self, self->additional->successor, req_id)) {
-    copy_node(self->additional->successor, &successor);
+  if (!node_is_null(get_successor()) &&
+             in_interval(self, get_successor(), req_id)) {
+    copy_node(get_successor(), &successor);
   } else {
     response_type = MSG_TYPE_FIND_SUCCESSOR_RESP_NEXT;
     if (type == MSG_TYPE_FIND_SUCCESSOR) {
       struct node* next = closest_preceeding_node(req_id);
       copy_node(next, &successor);
     } else if (type == MSG_TYPE_FIND_SUCCESSOR_LINEAR) {
-      copy_node(self->additional->successor, &successor);
+      copy_node(get_successor(), &successor);
     }
   }
   assert(!node_is_null(&successor));
@@ -221,15 +221,14 @@ handle_get_predecessor(chord_msg_t type,
   unsigned char msg[CHORD_HEADER_SIZE + sizeof(struct node)];
   chord_msg_t response_type;
   size_t size = 0;
-  assert(self && self->additional);
-  if (!node_is_null(self->additional->predecessor)) {
+  if (!node_is_null(get_predecessor())) {
     response_type = MSG_TYPE_GET_PREDECESSOR_RESP;
     size = sizeof(struct node);
   } else {
     response_type = MSG_TYPE_GET_PREDECESSOR_RESP_NULL;
   }
   marshal_msg(
-    response_type, src, size, (unsigned char*)self->additional->predecessor, msg);
+    response_type, src, size, (unsigned char*)get_predecessor(), msg);
     return chord_send_nonblock_sock(msg, CHORD_HEADER_SIZE+size, s);
 
 }
@@ -250,18 +249,18 @@ handle_notify(chord_msg_t type,
   assert(self);
   struct node n;
   memcpy(&n, data, sizeof(struct node));
-  DEBUG(INFO, "get notify from %d curr is: %d\n", n.id, self->additional->predecessor->id);
+  DEBUG(INFO, "get notify from %d curr is: %d\n", n.id, get_predecessor()->id);
   if (is_pre(n.id)) {
-    if (!node_is_null(self->additional->predecessor)) {
+    if (!node_is_null(get_predecessor())) {
       DEBUG(INFO,
             "got notify update pre old %d new %d\n",
-            self->additional->predecessor->id,
+            get_predecessor()->id,
             n.id);
     } else {
       DEBUG(INFO, "got notify update pre old nil new %d\n", n.id);
     }
-    copy_node(&n, self->additional->predecessor);
-    assert(self->additional->predecessor && n.id == self->additional->predecessor->id);
+    copy_node(&n, get_predecessor());
+    assert(get_predecessor() && n.id == get_predecessor()->id);
   }
   return CHORD_OK;
 }

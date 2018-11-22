@@ -164,7 +164,6 @@ struct node
   uint32_t size;
   uint32_t used;
   struct in6_addr addr;
-  struct node_additional* additional;   /*!< Pointer to our successor node. */
 };
 
 struct node_additional {
@@ -187,9 +186,9 @@ struct socket_wrapper {
 #endif
 
 struct aggregate{
-  int nodes;
-  int available;
-  int used;
+  uint32_t nodes;
+  uint32_t available;
+  uint32_t used;
 };
 
 struct child
@@ -303,7 +302,7 @@ chord_send_block_and_wait(struct node* target,
                           unsigned char* msg,
                           size_t size,
                           chord_msg_t wait,
-                          /*@null@*/ unsigned char* buf,
+                          /*@null out@*/  unsigned char* buf,
                           size_t bufsize,
                           /*@null@*/ size_t *ret_size);
 
@@ -325,6 +324,11 @@ struct aggregate *get_stats(void);
 struct node*
 get_own_node(void);
 struct node*
+get_successor(void);
+
+struct node*
+get_predecessor(void);
+/*@null@*/ struct node*
 closest_preceeding_node(nodeid_t id);
 
 /**
@@ -374,7 +378,7 @@ find_successor(struct node* node, struct node* ret, nodeid_t id);
  * @return CHORD_OK if everything is fine CHORD_ERR otherwise
  */
 int
-hash(unsigned char* out,
+hash(/*@out@*/ unsigned char* out,
      const unsigned char* in,
      size_t in_size,
      size_t out_size);
@@ -415,17 +419,15 @@ add_node(struct node* node);
  *
  *  This function try to send a chord join to a known member in the ring.
  *
- * @param src node which wants to join
  * @return CHORD_OK if everything is fine CHORD_ERR otherwise
  */
 int
-join(struct node* src, struct node* target);
+join(struct node* target);
 
 /**
  * \brief Notify a node n' that we now consider it our successor.
  * This is needed because n' may want to select us as his new predecessor.
  *
- * @param src node which wants to join
  * @return CHORD_OK if everything is fine CHORD_ERR otherwise
  */
 int

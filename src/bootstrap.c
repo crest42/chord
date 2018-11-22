@@ -7,7 +7,7 @@ extern struct bootstrap_list bslist;
 int
 fill_bslist_mcast(const char* addr, uint32_t max, uint32_t timeout)
 {
-  struct node mcast_node = {.id = 0, .size = 0,.used = 0, .additional = NULL};
+  struct node mcast_node = {.id = 0, .size = 0,.used = 0};
   addr_to_node(&mcast_node, addr);
   unsigned char msg[CHORD_HEADER_SIZE + sizeof(nodeid_t)];
   unsigned char read_buf[CHORD_HEADER_SIZE + sizeof(nodeid_t)];

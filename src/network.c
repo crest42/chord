@@ -281,7 +281,7 @@ wait_for_message(struct node* node, struct socket_wrapper *s)
       }
       break;
     case MSG_TYPE_COPY_SUCCESSORLIST: {
-      unsigned char msg[CHORD_HEADER_SIZE + (sizeof(struct node) *(SUCCESSORLIST_SIZE-1))];
+      unsigned char msg[CHORD_HEADER_SIZE + (sizeof(struct node) * (SUCCESSORLIST_SIZE-1))];
       marshal_msg(MSG_TYPE_COPY_SUCCESSORLIST_RESP,
                    src_id,
                     (sizeof(struct node) * (SUCCESSORLIST_SIZE-1)),
@@ -292,8 +292,7 @@ wait_for_message(struct node* node, struct socket_wrapper *s)
                                      s);
       if (ret == CHORD_ERR) {
         DEBUG(ERROR,
-              "Error while sending MSG_TYPE_FIND_SUCCESSOR_RESP_NEXT "
-              "nonblocking");
+              "Error while sending MSG_TYPE_COPY_SUCCESSORLIST_RESP\n");
       }
       break;
     }
