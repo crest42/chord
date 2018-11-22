@@ -2,21 +2,24 @@
 #include "../include/bootstrap.h"
 #include "../include/network.h"
 
-int fill_bslist_mcast(const char *addr, uint32_t max, uint32_t timeout) {
+extern struct node* self;
+extern struct bootstrap_list bslist;
+int
+fill_bslist_mcast(const char* addr, uint32_t max, uint32_t timeout)
+{
   struct node mcast_node = {.id = 0, .size = 0,.used = 0, .additional = NULL};
-  struct node* mynode = get_own_node();
   addr_to_node(&mcast_node, addr);
   unsigned char msg[CHORD_HEADER_SIZE + sizeof(nodeid_t)];
   unsigned char read_buf[CHORD_HEADER_SIZE + sizeof(nodeid_t)];
   marshal_msg(MSG_TYPE_PING,
               CHORD_RING_SIZE,
               sizeof(nodeid_t),
-              (unsigned char*)(&(mynode->id)),
+              (unsigned char*)(&(self->id)),
               msg);
   struct socket_wrapper sock;
   sock.any = false;
   int s = sock_wrapper_open(
-    &sock, get_own_node(), &mcast_node, CHORD_PORT + 1, CHORD_PORT);
+    &sock, self, &mcast_node, CHORD_PORT + 1, CHORD_PORT);
   if (s == -1) {
     DEBUG(ERROR, "socket: %s\n", strerror(errno));
     return MSG_TYPE_CHORD_ERR;
@@ -55,13 +58,11 @@ int fill_bslist_ll_mcast(uint32_t max, uint32_t timeout) {
 }
 
 int add_node_to_bslist(struct in6_addr *addr) {
-  struct bootstrap_list* bslist = get_bslist();
-  assert(bslist);
-  if (bslist->curr == bslist->size) {
+  if (bslist.curr == bslist.size) {
     return CHORD_ERR;
   }
-  uint32_t pos = bslist->curr++;
-  memcpy(&bslist->list[pos], addr, sizeof(struct in6_addr));
+  uint32_t pos = bslist.curr++;
+  memcpy(&bslist.list[pos], addr, sizeof(struct in6_addr));
   return CHORD_OK;
 }
 

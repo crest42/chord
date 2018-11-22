@@ -1,6 +1,10 @@
 #include "../include/chord.h"
 #include "../include/network.h"
 
+extern struct node mynode;
+extern struct node *self;
+extern struct node successorlist[SUCCESSORLIST_SIZE];
+
 #ifdef POSIX_SOCK
 int sock_wrapper_open(struct socket_wrapper *wrapper,struct node *node,struct node *target,int local_port,int remote_port){
   return CHORD_OK;
@@ -35,8 +39,8 @@ int addr_to_bin(struct in6_addr *to, const char *from) {
 int
 addr_to_node(struct node* node, const char *addr)
 {
-  assert(node);
-  assert(addr);
+  assert(node != NULL);
+  assert(addr != NULL);
   return addr_to_bin(&node->addr, addr);
 }
 
@@ -50,14 +54,19 @@ chord_send_nonblock_sock(unsigned char* msg,
 
 int
 add_msg_cont(unsigned char* data, unsigned char* to, uint32_t size,size_t size_existing) {
-  assert(to);
-  assert(data);
+  assert(to != NULL);
+  assert(data != NULL);
   assert(size > 0);
   assert(size_existing > 0);
   uint32_t old = 0;
   memcpy(&old, &to[CHORD_MSG_LENGTH_SLOT], sizeof(old));
   uint32_t new = htonl(ntohl(old) + size);
   memcpy(&to[CHORD_MSG_LENGTH_SLOT], &new, CHORD_MSG_LENGTH_SIZE);
+  #ifndef NDEBUG
+  unsigned char *max = ((to + size_existing) > data) ? (to + size_existing) : data;
+  unsigned char *min = (to + size_existing + size) > (data + size) ? to + size_existing + size : data + size;
+  assert(max <= min);
+  #endif
   memcpy(to + size_existing, data, size);
   return CHORD_OK;
 }
@@ -70,11 +79,9 @@ marshal_msg(chord_msg_t msg_type,
              unsigned char* msg)
 {
   assert(msg_type > 0);
+  assert(msg != NULL);
   assert(dst_id > 0);
   assert((int)size >= 0);
-  struct node* mynode = get_own_node();
-  assert(mynode);
-  assert(mynode->id > 0);
   uint32_t tmp = 0;
   if (content != NULL && size > 0) {
     memmove(&msg[CHORD_HEADER_SIZE], content, size);
@@ -83,11 +90,11 @@ marshal_msg(chord_msg_t msg_type,
         "craft msg %s with size %d from %d to dst: %d\n",
         msg_to_string(msg_type),
         (int)size,
-        mynode->id,
+        self->id,
         dst_id);
   tmp = htonl((uint32_t)msg_type);
   memcpy(&msg[CHORD_MSG_COMMAND_SLOT], &tmp, CHORD_MSG_COMMAND_SIZE);
-  tmp = htonl((uint32_t)(mynode->id));
+  tmp = htonl((uint32_t)(self->id));
   memcpy(&msg[CHORD_MSG_SRC_ID_SLOT], &tmp, CHORD_MSG_SRC_ID_SIZE);
   tmp = htonl((uint32_t)dst_id);
   memcpy(&msg[CHORD_MSG_DST_ID_SLOT], &tmp, CHORD_MSG_DST_ID_SIZE);
@@ -104,7 +111,7 @@ demarshal_msg(unsigned char* buf,
                uint32_t* size,
                unsigned char** content)
 {
-  assert(buf);
+  assert(buf != NULL);
   uint32_t tmp;
   if (type) {
     memcpy(&tmp, &buf[CHORD_MSG_COMMAND_SLOT], CHORD_MSG_COMMAND_SIZE);
@@ -159,7 +166,7 @@ wait_for_message(struct node* node, struct socket_wrapper *s)
         (int)size,
         src_id,
         dst_id);
-  if(size > (unsigned int)ret) {
+  if(size > (uint32_t)ret) {
     //assert(false);
     return CHORD_OK;
   }
@@ -274,7 +281,6 @@ wait_for_message(struct node* node, struct socket_wrapper *s)
       }
       break;
     case MSG_TYPE_COPY_SUCCESSORLIST: {
-      struct node *successorlist = get_successorlist();
       unsigned char msg[CHORD_HEADER_SIZE + (sizeof(struct node) *(SUCCESSORLIST_SIZE-1))];
       marshal_msg(MSG_TYPE_COPY_SUCCESSORLIST_RESP,
                    src_id,
@@ -292,7 +298,6 @@ wait_for_message(struct node* node, struct socket_wrapper *s)
       break;
     }
     case MSG_TYPE_GET_SUCCESSORLIST_ID: {
-      struct node *successorlist = get_successorlist();
       uint32_t offset = 0;
       unsigned char msg[CHORD_HEADER_SIZE + (SUCCESSORLIST_SIZE*sizeof(nodeid_t))];
       marshal_msg(MSG_TYPE_GET_SUCCESSORLIST_ID_RESP,src_id,offset,NULL,msg);

@@ -14,13 +14,32 @@
 #include "../include/network.h"
 #include "../include/bootstrap.h"
 
+struct node mynode, *self = &mynode;
+struct node_additional my_additional;
+struct node predecessor;
+struct fingertable_entry fingertable[FINGERTABLE_SIZE];
+struct node successorlist[SUCCESSORLIST_SIZE];
+struct childs childs, *self_childs = &childs;
+struct aggregate stats, *mystats = &stats;
+struct hooks hooks;
+struct bootstrap_list bslist;
 
 /* Static functions */
+
+static uint32_t
+chord_abs(nodeid_t a, nodeid_t b)
+{
+  if (b < a) {
+    return CHORD_RING_SIZE - a + b;
+  } else {
+    return b - a;
+  }
+}
 
 static int reset_fingertable(void) {
   nodeid_t start = 0;
   nodeid_t interval = 0;
-  for (int i = 0; i < FINGERTABLE_SIZE; i++) {
+  for (uint32_t i = 0; i < FINGERTABLE_SIZE; i++) {
     //TODO: Double Modulo?
     start = (mynode.id + ((1 << i) % CHORD_RING_SIZE)) % CHORD_RING_SIZE;
     interval =
@@ -34,9 +53,8 @@ static int reset_fingertable(void) {
 
 static int set_nodeid(nodeid_t id) {
   assert(id > 0);
-  assert(id <= CHORD_RING_SIZE);
-  struct node* mynode = get_own_node();
-  mynode->id = id;
+  assert(id <= (uint32_t)CHORD_RING_SIZE);
+  self->id = id;
   return reset_fingertable();
 }
 
@@ -58,13 +76,12 @@ update_successorlist(struct node* src)
                               (sizeof(successorlist) - sizeof(struct node)),
                               NULL);
   if (type == MSG_TYPE_COPY_SUCCESSORLIST_RESP) {
-    memcpy(successorlist, src, sizeof(struct node));
+    (void)memcpy(successorlist, src, sizeof(struct node));
     return CHORD_OK;
   } else {
     DEBUG(DEBUG, "get msg type %s\n", msg_to_string(type));
     return CHORD_ERR;
   }
-  return CHORD_OK;
 }
 
 
@@ -88,7 +105,7 @@ get_predecessor(struct node* target, struct node* pre)
   if (type == MSG_TYPE_GET_PREDECESSOR_RESP) {
     return CHORD_OK;
   } else if (type == MSG_TYPE_GET_PREDECESSOR_RESP_NULL) {
-    memset(pre, 0, sizeof(struct node));
+    (void)memset(pre, 0, sizeof(struct node));
     return CHORD_OK;
   } else {
     DEBUG(ERROR, "get msg type %s %d\n", msg_to_string(type), type);
@@ -106,23 +123,26 @@ static inline uint32_t lg_up(uint32_t x) {
   return lg_down(x - 1) + 1;
 }
 
-static int tree_granularity(int l) {
+static int tree_granularity(uint32_t l) {
   return 0;
   int x = l - lg_up(l) - 1;
   return (x < 0) ? 0 : x;
 }
 
 static bool nodes_share_n_bits(nodeid_t first, nodeid_t second, int bits) {
-  nodeid_t mask = ((nodeid_t)__INT_MAX__) ^ (nodeid_t)(((int)1 << (CHORD_RING_BITS - bits)) - 1);
-    if ((first & mask) == (second & mask)) {
-      return true;
+  assert(bits <= CHORD_RING_SIZE);
+  nodeid_t mask =
+    ((nodeid_t)__INT_MAX__) ^
+    (nodeid_t)(((uint32_t)1 << (uint32_t)(CHORD_RING_BITS - bits)) - 1);
+  if ((first & mask) == (second & mask)) {
+    return true;
     }
     return false;
 }
 
 static nodeid_t get_share(struct node *node, struct node *successor) {
-  assert(node);
-  assert(successor);
+  assert(node != NULL);
+  assert(successor != NULL);
   if (successor->id > node->id) {
     return successor->id - node->id;
   } else {
@@ -133,9 +153,11 @@ static nodeid_t get_share(struct node *node, struct node *successor) {
 static nodeid_t find_splitnode(struct node *target) {
 
   struct node r, pre;
+  memset(&r,0,sizeof(r)),
+  memset(&pre,0,sizeof(pre)),
   find_successor(target, &r, mynode.id);
   struct node list[CHORD_RING_BITS];
-  memset(list, 0, sizeof(list));
+  (void)memset(list, 0, sizeof(list));
   for (int i = 0; i < CHORD_RING_BITS; i++) {
     if(i == 0) {
       find_successor(&r, &list[i], r.id);
@@ -156,7 +178,8 @@ static nodeid_t find_splitnode(struct node *target) {
     }
   }
   nodeid_t share;
-  if (set >= 1 << (CHORD_RING_BITS - tree_granularity(CHORD_RING_BITS))) {
+  assert(CHORD_RING_BITS >= tree_granularity(CHORD_RING_BITS));
+  if (set >= 1 << (uint32_t)(CHORD_RING_BITS - tree_granularity(CHORD_RING_BITS))) {
     get_predecessor(&r, &pre);
     if(pre.id < r.id) {
       share = r.id - pre.id;
@@ -205,7 +228,7 @@ pop_successor(struct node* next)
     memmove(&successorlist[0],
            &successorlist[1],
            sizeof(successorlist) - sizeof(struct node));
-    memset(&successorlist[SUCCESSORLIST_SIZE - 1], 0, sizeof(struct node));
+    (void)memset(&successorlist[SUCCESSORLIST_SIZE - 1], 0, sizeof(struct node));
     i++;
   } while (node_is_null(next) &&
            i < SUCCESSORLIST_SIZE);
@@ -217,19 +240,19 @@ init_fingertable(void)
 {
   reset_fingertable();
   for (int i = 0; i < FINGERTABLE_SIZE; i++) {
-    memset(&fingertable[i].node, 0, sizeof(struct node));
+    (void)memset(&fingertable[i].node, 0, sizeof(struct node));
   }
   return CHORD_OK;
 }
 
 static int init_successorlist(void) {
-  memset(successorlist, 0, sizeof(successorlist));
+  (void)memset(successorlist, 0, sizeof(successorlist));
   return CHORD_OK;
 }
 
 static nodeid_t parent_function(nodeid_t id) {
   int k = 2;
-  nodeid_t alpha = CHORD_TREE_ROOT;
+  nodeid_t alpha = (nodeid_t)CHORD_TREE_ROOT;
   int a = (id - alpha);
   if(a < 0 && a > -CHORD_RING_SIZE) {
     a = (((a%CHORD_RING_SIZE)+CHORD_RING_SIZE)%CHORD_RING_SIZE);
@@ -253,7 +276,7 @@ stabilize(struct node* node)
   struct node pre;
   int ret = CHORD_OK;
   if (!node_is_null(node->additional->successor)) {
-    memset(&pre, 0, sizeof(pre));
+    (void)memset(&pre, 0, sizeof(pre));
     ret = get_predecessor(node->additional->successor, &pre);
     DEBUG(INFO,
           "got pre %d\n",
@@ -280,7 +303,7 @@ stabilize(struct node* node)
           DEBUG(DEBUG, "looks like me->suc->pre stays the same\n");
         }
       } else {
-        memcpy(node->additional->predecessor, node->additional->successor, sizeof(struct node));
+        (void)memcpy(node->additional->predecessor, node->additional->successor, sizeof(struct node));
       }
       if (!node_is_null(mynode.additional->successor)) {
         notify(mynode.additional->successor);
@@ -292,7 +315,7 @@ stabilize(struct node* node)
   return ret;
 }
 
-static int
+static bool
 is_finger(struct node* n, struct fingertable_entry* entry)
 {
   if (!n || !entry) {
@@ -321,12 +344,12 @@ fix_fingers(struct node* node)
   // TODO: Not really sure if we want to ommit our successor.
   nodeid_t i = 0;
   do {
-    i = rand() % CHORD_RING_BITS;
+    i = (uint32_t)(rand() % CHORD_RING_BITS);
   } while (i == 0);
   struct fingertable_entry* f = &fingertable[i];
 
   DEBUG(INFO, "Fix finger %d\n", i);
-  if (node->additional->successor && !node_is_null(node->additional->successor) &&
+  if (node->additional->successor != NULL && !node_is_null(node->additional->successor) &&
       (node->id != node->additional->successor->id)) {
     DEBUG(DEBUG,
           "Fix fingers find successor for %d ask: %d\n",
@@ -465,18 +488,17 @@ node_exit(struct node* node)
 
 
 static bool in_sync(void) {
-  struct node *mynode = get_own_node();
-  if (!node_is_null(mynode->additional->successor) && !node_is_null(mynode->additional->predecessor)) {
+  if (!node_is_null(self->additional->successor) && !node_is_null(self->additional->predecessor)) {
     return true;
   }
   return false;
 }
 
 static bool is_root(struct node *n, struct node *pre) {
-  return in_interval(pre,n,CHORD_TREE_ROOT - 1);
+  return in_interval(pre,n,(uint32_t)CHORD_TREE_ROOT - 1);
 }
 
-static nodeid_t get_parent(struct child *c) {
+static int get_parent(struct child *c) {
   c->parent = mynode.id;
   c->i = 0;
   do {
@@ -491,10 +513,13 @@ static nodeid_t get_parent(struct child *c) {
 }
 
 static int register_child(struct child *c){
-  assert(c);
+  assert(c != NULL);
   struct child new;
-  memset(&new, 0, sizeof(new));
-  get_parent(&new);
+  (void)memset(&new, 0, sizeof(new));
+  if(get_parent(&new) != CHORD_OK) {
+    DEBUG(ERROR, "Error in get_parent\n");
+    return CHORD_ERR;
+  }
   if(false && new.parent == c->parent) {
     return CHORD_OK;
   } else {
@@ -502,10 +527,9 @@ static int register_child(struct child *c){
     c->i      = new.i;
   }
   chord_msg_t type = MSG_TYPE_CHORD_ERR;
-  struct node* mynode = get_own_node();
   do {
-    find_successor(mynode->additional->predecessor, &c->parent_suc, c->parent - 1);
-  } while (c->parent_suc.id == mynode->id);
+    find_successor(self->additional->predecessor, &c->parent_suc, c->parent - 1);
+  } while (c->parent_suc.id == self->id);
   unsigned char msg[CHORD_HEADER_SIZE + sizeof(struct child)];
   unsigned char ret[sizeof(struct node) + sizeof(struct aggregate)];
 
@@ -513,7 +537,7 @@ static int register_child(struct child *c){
   DEBUG(INFO,
         "Register Child P^%d(%d) = %d on %d with size: %d and node: %d\n",
         c->i,
-        get_own_node()->id,
+        self->id,
         c->parent,
         c->parent_suc.id,
         c->aggregation.available,
@@ -530,10 +554,10 @@ static int register_child(struct child *c){
                                    (unsigned char*)ret,
                                    sizeof(ret),
                                    NULL);
-  memcpy(&c->parent_suc, ret, sizeof(struct node));
+  (void)memcpy(&c->parent_suc, ret, sizeof(struct node));
   } while (type == MSG_TYPE_REGISTER_CHILD_REDIRECT);
   if (type == MSG_TYPE_REGISTER_CHILD_OK) {
-    memcpy(get_stats(), ret + sizeof(struct node), sizeof(struct aggregate));
+    (void)memcpy(&stats, ret + sizeof(struct node), sizeof(struct aggregate));
     return CHORD_OK;
   } else {
     c->parent = 0;
@@ -560,8 +584,8 @@ static int refresh_parent(struct child *c) {
                               (unsigned char*)ret,
                               sizeof(ret),
                               NULL);
-    memcpy(&c->parent_suc, ret, sizeof(struct node));
-    memcpy(get_stats(), (ret)+sizeof(struct node), sizeof(struct aggregate));
+    (void)memcpy(&c->parent_suc, ret, sizeof(struct node));
+    (void)memcpy(&stats, (ret)+sizeof(struct node), sizeof(struct aggregate));
   if(type == MSG_TYPE_REFRESH_CHILD_REDIRECT) {
     register_child(c);
   } else if(type == MSG_TYPE_CHORD_ERR) {
@@ -572,41 +596,41 @@ static int refresh_parent(struct child *c) {
 
 #ifdef DEBUG_ENABLE
 static int get_nodes(void) {
-  return get_stats()->nodes;
+  return stats.nodes;
 }
 
 static int get_used(void) {
-  return get_stats()->used;
+  return stats.used;
 }
 
 static int get_size(void) {
-  return get_stats()->available;
+  return stats.available;
 }
 #endif
 
 static int aggregate(struct aggregate *aggregation) {
   int nodes = 0, available = 0, used = 0;
-  struct childs* childs = get_childs();
+  struct childs* c = &childs;
   time_t systime = time(NULL);
-  memset(aggregation, 0, sizeof(struct aggregate));
+  (void)memset(aggregation, 0, sizeof(struct aggregate));
   for (int i = 0; i < CHORD_TREE_CHILDS; i++) {
-    if (childs->child[i].child != 0 && (systime-(childs->child[i].t)) <= 6) {
-      int n = childs->child[i].aggregation.nodes,
-          a = childs->child[i].aggregation.available,
-          u = childs->child[i].aggregation.used;
+    if (c->child[i].child != 0 && (systime-(c->child[i].t)) <= 6) {
+      int n = c->child[i].aggregation.nodes,
+          a = c->child[i].aggregation.available,
+          u = c->child[i].aggregation.used;
       (n > 0) ? nodes += n : nodes++;
       available += a;
       used += u;
     }
   }
   aggregation->nodes = ++nodes;
-  aggregation->available = available + get_own_node()->size;
-  aggregation->used = used + get_own_node()->used;
+  aggregation->available = available + self->size;
+  aggregation->used = used + self->used;
   return CHORD_OK;
 }
 
 static int
-start(struct node* node)
+start(/*@NULL@*/ struct node* node)
 {
   if (node) {
     if (CHORD_CHANGE_ID) {
@@ -631,19 +655,33 @@ start(struct node* node)
         copy_node(mynode.additional->successor, &fingertable[i].node);
       }
     }
-    memset(successorlist, 0, sizeof(successorlist));
+    (void)memset(successorlist, 0, sizeof(successorlist));
   }
 
   return CHORD_OK;
 }
 
 /* Public functions */
+struct node *get_own_node(void) {
+  return self;
+}
+
+struct hooks *get_hooks(void) {
+  return &hooks;
+}
+
 int
 copy_node(struct node* node, struct node* copy)
 {
-  assert(node);
-  assert(copy);
-  memcpy(copy, node, sizeof(struct node));
+  assert(node != NULL);
+  assert(copy != NULL);
+  assert(copy != self);
+  #ifndef NDEBUG
+  unsigned char *max = (copy > node) ? (unsigned char *)(copy) : (unsigned char *)node;
+  unsigned char *min = (((unsigned char *)copy) + sizeof(struct node)) > (((unsigned char *)node) + sizeof(struct node)) ? ((unsigned char *)copy) + sizeof(struct node) : ((unsigned char *)node) + sizeof(struct node);
+  assert(max <= min);
+  #endif
+  (void)memcpy(copy, node, sizeof(struct node));
   assert(copy->id == node->id);
   assert(memcmp(&node->addr,&copy->addr,sizeof(node->addr)) == 0);
   return CHORD_OK;
@@ -652,8 +690,8 @@ copy_node(struct node* node, struct node* copy)
 bool
 in_interval_id(nodeid_t start, nodeid_t end, nodeid_t test)
 {
-  return (mod((test - start), CHORD_RING_SIZE) <
-          mod((end - start), CHORD_RING_SIZE));
+  return (mod((int)(test - start), CHORD_RING_SIZE) <
+          mod((int)(end - start), CHORD_RING_SIZE));
 }
 
 bool
@@ -669,13 +707,13 @@ in_interval(struct node* first, struct node* second, nodeid_t id)
   return in_interval_id(first->id, second->id, id);
 }
 
-int
+uint32_t
 get_mod_of_hash(unsigned char* hash, int modulo)
 {
-  int remainder = 0;
+  uint32_t r = 0;
   for (int i = 0; i < HASH_DIGEST_SIZE; ++i)
-    remainder = (remainder * 10 + hash[i]) % modulo;
-  return remainder;
+    r = (r * 10 + (uint32_t)hash[i]) % modulo;
+  return r;
 }
 
 int
@@ -684,12 +722,12 @@ remove_dead_node(nodeid_t id)
   DEBUG(INFO, "Remove dead node %d\n", id);
   for (int i = 1; i < FINGERTABLE_SIZE; i++) {
     if (fingertable[i].node.id == id) {
-      memset(&fingertable[i].node, 0, sizeof(fingertable[i].node));
+      (void)memset(&fingertable[i].node, 0, sizeof(fingertable[i].node));
     }
   }
   for (int i = 0; i < SUCCESSORLIST_SIZE; i++) {
     if (successorlist[i].id == id) {
-      memset(&successorlist[i], 0, sizeof(successorlist[i]));
+      (void)memset(&successorlist[i], 0, sizeof(successorlist[i]));
     }
   }
   return CHORD_OK;
@@ -699,7 +737,7 @@ int chord_start(void) {
   if (bslist.curr > 0) {
     for (uint32_t i = 0; i < bslist.size;i++) {
       struct node tmp = {.id = CHORD_RING_SIZE, .additional = NULL, .size = 0, .used  = 0};
-      memcpy(&tmp.addr, &bslist.list[i], sizeof(struct in6_addr));
+      memcpy(&tmp.addr, &bslist.list[i], sizeof(tmp.addr));
       if(ping_node(&tmp) == CHORD_OK) {
         start(&tmp);
         break;
@@ -714,11 +752,11 @@ int chord_start(void) {
 int
 init_chord(const char* local_addr)
 {
-  memset(&mynode, 0, sizeof(mynode));
-  memset(&my_additional, 0, sizeof(my_additional));
-  memset(&predecessor, 0, sizeof(predecessor));
-  memset(&childs, 0, sizeof(struct child));
-  memset(&bslist, 0, sizeof(struct bootstrap_list));
+  (void)memset(&mynode, 0, sizeof(mynode));
+  (void)memset(&my_additional, 0, sizeof(my_additional));
+  (void)memset(&predecessor, 0, sizeof(predecessor));
+  (void)memset(&childs, 0, sizeof(struct child));
+  (void)memset(&bslist, 0, sizeof(struct bootstrap_list));
   bslist.size = BSLIST_SIZE;
   time_start = time(NULL);
   if (addr_to_node(&mynode, local_addr) == CHORD_ERR) {
@@ -740,13 +778,14 @@ init_chord(const char* local_addr)
   init_fingertable();
   init_successorlist();
 
-  struct aggregate* a = get_stats();
+  struct aggregate* a = &stats;
   mynode.size = 1024;
   mynode.used = 0;
   a->used = 0;
   a->nodes = 0;
 
   struct hooks *h = get_hooks();
+  assert(h != NULL);
   h->periodic_hook = NULL;
 
   return CHORD_OK;
@@ -778,9 +817,10 @@ chord_send_block_and_wait(struct node* target,
   uint32_t msg_size;
   unsigned char* msg_content;
   struct socket_wrapper sock;
+  (void)memset(&sock, 0, sizeof(sock));
   sock.any = false;
   int s = sock_wrapper_open(
-    &sock, get_own_node(), target, CHORD_PORT + 1, CHORD_PORT);
+    &sock, self, target, CHORD_PORT + 1, CHORD_PORT);
   if (s == -1) {
     DEBUG(ERROR, "socket: %s\n", strerror(errno));
     return MSG_TYPE_CHORD_ERR;
@@ -836,6 +876,7 @@ chord_send_block_and_wait(struct node* target,
   if (msg_size > bufsize) {
     msg_size = bufsize;
   }
+  assert(buf != NULL);
   memcpy(buf, msg_content, msg_size);
   if(ret_size)
     *ret_size = msg_size;
@@ -845,7 +886,7 @@ chord_send_block_and_wait(struct node* target,
 
 int
 get_successorlist_id(struct node *target, nodeid_t *id) {
-  assert(target);
+  assert(target != NULL);
   unsigned char msg[CHORD_HEADER_SIZE];
   marshal_msg(
       MSG_TYPE_GET_SUCCESSORLIST_ID, target->id, 0, NULL, msg);
@@ -871,7 +912,7 @@ static int chord_find_successor(struct node *target, struct node *ret, nodeid_t 
   DEBUG(INFO, "Start find successor ask: %d for %d\n", target->id, id);
   unsigned char msg[CHORD_HEADER_SIZE + sizeof(nodeid_t)];
   while (final == NULL) {
-    memset(msg, 0, sizeof(msg)); //TODO Remove
+    (void)memset(msg, 0, sizeof(msg)); //TODO Remove
     marshal_msg(
       query_type, tmp->id, sizeof(nodeid_t), (unsigned char*)&id, msg);
     chord_msg_t type =
@@ -906,21 +947,48 @@ static int chord_find_successor(struct node *target, struct node *ret, nodeid_t 
 
   nodeid_t ret_id = ret->id;
   if (ret_id == 0) {
-    memset(ret, 0, sizeof(struct node));
+    (void)memset(ret, 0, sizeof(struct node));
     return CHORD_ERR;
   }
   DEBUG(INFO, "Found successor for %d on %d steps: %d\n", id, steps, ret->id);
   return CHORD_OK;
 }
 
+
+
+struct node*
+closest_preceeding_node(nodeid_t id)
+{
+  nodeid_t minabs = __INT_MAX__;
+  struct node* retnode = NULL;
+  for (int i = 0; i < FINGERTABLE_SIZE; i++) {
+    if (!node_is_null(&fingertable[i].node)) {
+      nodeid_t finger_abs = chord_abs(fingertable[i].node.id, id);
+      if (finger_abs < minabs) {
+        minabs = finger_abs;
+        retnode = &fingertable[i].node;
+      }
+    }
+  }
+  for (int i = 0; i < SUCCESSORLIST_SIZE; i++) {
+    if (!node_is_null(&successorlist[i])) {
+      nodeid_t finger_abs = chord_abs(successorlist[i].id, id);
+      if (finger_abs < minabs) {
+        minabs = finger_abs;
+        retnode = &successorlist[i];
+      }
+    }
+  }
+  return retnode;
+}
+
 int
 find_successor(struct node* target, struct node* ret, nodeid_t id)
 {
-  assert(id <= CHORD_RING_SIZE);
-  struct node* self = get_own_node();
+  assert(id <= (nodeid_t)CHORD_RING_SIZE);
   if (!node_is_null(self->additional->predecessor) &&
       in_interval(self->additional->predecessor, self, id)) {
-    copy_node(get_own_node(),ret);
+    copy_node(self,ret);
     return CHORD_OK;
   } else {
     return chord_find_successor(target, ret, id);
@@ -959,7 +1027,7 @@ notify(struct node* target)
 int
 join(struct node* src, struct node* target)
 {
-  memset(src->additional->predecessor, 0, sizeof(struct node));
+  (void)memset(src->additional->predecessor, 0, sizeof(struct node));
   if (find_successor(target, src->additional->successor, src->id) == CHORD_ERR) {
     return CHORD_ERR;
   }
@@ -979,7 +1047,7 @@ create_node(char* address, struct node* node)
     DEBUG(FATAL, "Error address is NULL in create node\n");
     return CHORD_ERR;
   }
-  memset(&node->addr, 0, sizeof(node->addr));
+  (void)memset(&node->addr, 0, sizeof(node->addr));
 
   int c = inet_pton(AF_INET6, address, &(node->addr));
   if (c != 1) {
@@ -1005,20 +1073,19 @@ create_node(char* address, struct node* node)
   return CHORD_OK;
 }
 
-void*
+/*@null@*/ void*
 thread_wait_for_msg(void* n)
 {
   int iteration = 0;
   struct node* node = (struct node*)n;
   struct socket_wrapper s;
+  (void)memset(&s, 0, sizeof(s));
   s.any = true;
-  struct node tmp;
-  addr_to_node(&tmp,"");
-  if (sock_wrapper_open(&s, get_own_node(), NULL, CHORD_PORT, 0) != 0) {
+  if (sock_wrapper_open(&s, self, NULL, CHORD_PORT, 0) != 0) {
     DEBUG(ERROR,"Error while open new port\n");
     return NULL;
   }
-  while (1) {
+  while (true) {
     iteration++;
     DEBUG(INFO, "wait for message run %d\n", iteration);
     if (wait_for_message(node, &s) == CHORD_ERR) {
@@ -1030,15 +1097,15 @@ thread_wait_for_msg(void* n)
 }
 
 
-void*
+/*@null@*/ void*
 thread_periodic(void* n)
 {
   (void)n;
   int i = 0;
   struct node* node = &mynode;
   struct child c;
-  memset(&c, 0, sizeof(c));
-  while (1) {
+  (void)memset(&c, 0, sizeof(c));
+  while (true) {
     struct hooks *h = get_hooks();
     atm = time(NULL);
     #ifdef DEBUG_ENABLE
@@ -1062,8 +1129,8 @@ thread_periodic(void* n)
     assert(!node_is_null(mynode.additional->successor));
     assert(node->id > 0);
     i++;
-    assert(node->additional->successor);
-    assert(node->additional->predecessor);
+    assert(node->additional->successor != NULL);
+    assert(node->additional->predecessor != NULL);
 
     DEBUG(INFO, "Start stabilization Procedure\n");
     nodeid_t old = mynode.id;
@@ -1083,7 +1150,7 @@ thread_periodic(void* n)
       DEBUG(
         ERROR, "ERROR PRE %d Do not respond to ping\n", node->additional->predecessor->id);
       remove_dead_node(node->additional->predecessor->id);
-      memset(node->additional->predecessor, 0, sizeof(struct node));
+      (void)memset(node->additional->predecessor, 0, sizeof(struct node));
     }
 
     if (!node_is_null(node->additional->successor) && !check_successor(node)) {
@@ -1103,11 +1170,11 @@ thread_periodic(void* n)
       }
       if(!node_is_null(&c.parent_suc)) {
         if(refresh_parent(&c) == CHORD_ERR) {
-          memset(&c.parent_suc, 0, sizeof(struct node));
+          (void)memset(&c.parent_suc, 0, sizeof(struct node));
         }
       }
     } else {
-      memcpy(get_stats(), &c.aggregation, sizeof(struct aggregate));
+      (void)memcpy(&stats, &c.aggregation, sizeof(struct aggregate));
       DEBUG(INFO,
             "root got %d nodes %d/%d used\n",
             get_nodes(),
@@ -1115,7 +1182,7 @@ thread_periodic(void* n)
             get_size());
     }
 
-    if (in_sync() && h->periodic_hook) {
+    if (in_sync() && h->periodic_hook != NULL) {
       DEBUG(INFO, "Call periodic Hook\n");
       h->periodic_hook(h->periodic_data);
     }

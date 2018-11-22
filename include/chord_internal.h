@@ -1,58 +1,11 @@
 #ifndef _LIBCHORD_INT_H
 #define _LIBCHORD_INT_H
 #include "chord.h"
-struct node mynode;
-struct node_additional my_additional;
-struct node predecessor;
-struct fingertable_entry fingertable[FINGERTABLE_SIZE];
-struct node successorlist[SUCCESSORLIST_SIZE];
-struct childs childs;
-struct aggregate stats;
-struct hooks hooks;
-struct bootstrap_list bslist;
 
 time_t time_start;
 time_t atm;
 size_t read_b;
 size_t write_b;
-
-struct hooks*
-get_hooks(void)
-{
-  return &hooks;
-}
-
-struct aggregate *get_stats(void) {
-  return &stats;
-}
-
-struct bootstrap_list *get_bslist(void) {
-  return &bslist;
-}
-
-struct node*
-get_own_node(void)
-{
-  return &mynode;
-}
-
-struct childs*
-get_childs(void)
-{
-  return &childs;
-}
-
-struct fingertable_entry*
-get_fingertable(void)
-{
-  return fingertable;
-}
-
-struct node*
-get_successorlist(void)
-{
-  return successorlist;
-}
 
 // euclidean mod because -1 % n should be n-1 not 1
 static int
@@ -69,14 +22,19 @@ struct chord_callbacks cc = { .ping_handler = handle_ping,
                               .register_child_handler = handle_register_child,
                               .refresh_child_handler = handle_refresh_child,
                               .get_handler = NULL,
-                              .put_handler = NULL };
+                              .put_handler = NULL,
+                              .sync_handler = NULL,
+                              .sync_fetch_handler = NULL };
 
 struct chord_callbacks *get_callbacks(void) {
   return &cc;
 }
 
 struct node null_node = { .id = 0,
-                          .additional = NULL };
+                          .additional = NULL,
+                          .size = 0,
+                          .used = 0
+                        };
 
 #ifndef RIOT
 struct timeval tout = { .tv_sec = 1, .tv_usec = 0 };

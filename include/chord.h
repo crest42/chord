@@ -13,7 +13,6 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <string.h>
-#include <unistd.h>
 #include <time.h>
 #include <stdio.h>
 #ifdef RIOT
@@ -60,12 +59,6 @@ msg_to_string(int msg);
 
 typedef uint32_t nodeid_t;
 
-#ifndef bool
-typedef int bool;
-#define true 1
-#define false 0
-#endif
-
 #ifdef RIOT
 #define _getpid() thread_getpid()
 #else
@@ -87,7 +80,7 @@ typedef int bool;
 #define CHORD_ERR (-1)
 #define CHORD_PERIODIC_SLEEP (2)
 #define CHORD_RING_SIZE (1 << CHORD_RING_BITS)
-#define CHORD_CHANGE_ID (1)
+#define CHORD_CHANGE_ID (true)
 #define CHORD_CHANGE_INTERVAL (5)
 #define CHORD_MSG_COMMAND_SLOT (0)
 #define CHORD_CHILD_TIMEOUT (3)
@@ -310,9 +303,9 @@ chord_send_block_and_wait(struct node* target,
                           unsigned char* msg,
                           size_t size,
                           chord_msg_t wait,
-                          unsigned char* buf,
+                          /*@null@*/ unsigned char* buf,
                           size_t bufsize,
-                          size_t *ret_size);
+                          /*@null@*/ size_t *ret_size);
 
 /**
  * \brief Set up a node struct from a given address
@@ -326,20 +319,13 @@ chord_send_block_and_wait(struct node* target,
 int
 create_node(char* address, struct node* node);
 
-/**
- * \brief Returns our own node
- *
- * @return node Our own node
- */
-struct node *get_own_node(void);
-
+struct hooks*
+get_hooks(void);
 struct aggregate *get_stats(void);
-
-struct bootstrap_list *get_bslist(void);
-
-struct childs *get_childs(void);
-
-struct hooks *get_hooks(void);
+struct node*
+get_own_node(void);
+struct node*
+closest_preceeding_node(nodeid_t id);
 
 /**
  * \brief Returns fingertable
@@ -392,7 +378,7 @@ hash(unsigned char* out,
      const unsigned char* in,
      size_t in_size,
      size_t out_size);
-int
+uint32_t
 get_mod_of_hash(unsigned char* hash, int modulo);
 /**
  * \brief Init the libary
@@ -456,7 +442,7 @@ notify(struct node* target);
  * @get_own_node
  * @return CHORD_OK if everything is fine CHORD_ERR otherwise
  */
-void*
+/*@null@*/ void*
 thread_wait_for_msg(void* n);
 
 /**
@@ -470,7 +456,7 @@ thread_wait_for_msg(void* n);
  * using @get_own_node
  * @return CHORD_OK if everything is fine CHORD_ERR otherwise
  */
-void*
+/*@null@*/ void*
 thread_periodic(void* n);
 
 /**

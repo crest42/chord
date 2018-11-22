@@ -1,53 +1,18 @@
 #include "../include/chord.h"
 #include "../include/network.h"
 //#include <stdio.h> //TODO:REMOVE
-static nodeid_t
-chord_abs(nodeid_t a, nodeid_t b)
-{
-  if (b < a) {
-    return CHORD_RING_SIZE - a + b;
-  } else {
-    return b - a;
-  }
-}
-
-static struct node*
-closest_preceeding_node(nodeid_t id)
-{
-  nodeid_t minabs = __INT_MAX__;
-  struct fingertable_entry *fingertable = get_fingertable();
-  struct node *successorlist = get_successorlist();
-  struct node* retnode = NULL;
-  for (int i = 0; i < FINGERTABLE_SIZE; i++) {
-    if (!node_is_null(&fingertable[i].node)) {
-      nodeid_t finger_abs = chord_abs(fingertable[i].node.id, id);
-      if (finger_abs < minabs) {
-        minabs = finger_abs;
-        retnode = &fingertable[i].node;
-      }
-    }
-  }
-  for (int i = 0; i < SUCCESSORLIST_SIZE; i++) {
-    if (!node_is_null(&successorlist[i])) {
-      nodeid_t finger_abs = chord_abs(successorlist[i].id, id);
-      if (finger_abs < minabs) {
-        minabs = finger_abs;
-        retnode = &successorlist[i];
-      }
-    }
-  }
-  return retnode;
-}
+extern struct node* self;
+extern struct childs *self_childs;
+extern struct aggregate* mystats;
 
 static bool
 is_pre(nodeid_t id)
 {
-  struct node *mynode =get_own_node();
-  assert(mynode);
-  if (node_is_null(mynode->additional->predecessor)) {
+  assert(self);
+  if (node_is_null(self->additional->predecessor)) {
     return true;
   }
-  if (in_interval(mynode->additional->predecessor, mynode, id)) {
+  if (in_interval(self->additional->predecessor, self, id)) {
     return true;
   }
   return false;
@@ -64,11 +29,10 @@ handle_ping(chord_msg_t type,
   assert(type == MSG_TYPE_PING);
   (void)type;
   (void)msg_size;
-  struct node* mynode = get_own_node();
   (void)data;
   unsigned char msg[CHORD_HEADER_SIZE + sizeof(nodeid_t)];
   marshal_msg(
-    MSG_TYPE_PONG, src, sizeof(nodeid_t), (unsigned char*)&(mynode->id), msg);
+    MSG_TYPE_PONG, src, sizeof(nodeid_t), (unsigned char*)&(self->id), msg);
   return chord_send_nonblock_sock(msg, CHORD_HEADER_SIZE + sizeof(nodeid_t), s);
 }
 
@@ -84,15 +48,13 @@ handle_refresh_child(chord_msg_t type,
   assert(type == MSG_TYPE_REFRESH_CHILD);
   assert(msg_size > 0);
   struct child* c = (struct child*)data;
-  struct childs *childs = get_childs();
-  struct node *mynode = get_own_node(), *retnode = mynode;
-  struct aggregate *mystats = get_stats();
+  struct node *retnode = self;
   time_t systime = time(NULL);
   chord_msg_t ret = MSG_TYPE_REGISTER_CHILD_EWRONG;
   for (int i = 0; i < CHORD_TREE_CHILDS; i++) {
-    if(childs->child[i].child == c->child) {
-      childs->child[i].t = systime;
-      childs->child[i].aggregation = c->aggregation;
+    if(self_childs->child[i].child == c->child) {
+      self_childs->child[i].t = systime;
+      self_childs->child[i].aggregation = c->aggregation;
       ret = MSG_TYPE_REFRESH_CHILD_OK;
       break;
     }
@@ -116,29 +78,27 @@ handle_register_child(chord_msg_t type,
   assert(type == MSG_TYPE_REGISTER_CHILD);
   assert(msg_size > 0);
   assert(src > 0);
-    (void)type;
+  (void)type;
   (void)msg_size;
   struct child* c = (struct child*)data;
-  struct node *mynode = get_own_node(), *retnode = mynode;
-  struct childs* childs = get_childs();
-  struct aggregate* mystats = get_stats();
+  struct node *retnode = self;
   time_t systime = time(NULL);
   chord_msg_t ret = MSG_TYPE_REGISTER_CHILD_EFULL;
   bool overloaded = true;
   for (int i = 0; i < CHORD_TREE_CHILDS; i++) {
-    if (childs->child[i].t < (systime - CHORD_CHILD_TIMEOUT) ||
-        childs->child[i].parent == 0 ||
-        childs->child[i].child == c->child ||
-        ((childs->child[i].child < CHORD_RING_SIZE / 2 &&
+    if (self_childs->child[i].t < (systime - CHORD_CHILD_TIMEOUT) ||
+        self_childs->child[i].parent == 0 ||
+        self_childs->child[i].child == c->child ||
+        ((self_childs->child[i].child < CHORD_RING_SIZE / 2 &&
           c->child < CHORD_RING_SIZE / 2 &&
-          childs->child[i].child < c->child) &&
+          self_childs->child[i].child < c->child) &&
          in_interval_id(
-           childs->child[i].child, c->child, childs->child[i].parent - 1))) {
-      if(childs->child[i].child != c->child) {
-        //printf("overwrite child %d with %d\n",childs->child[i].child,c->child);
+           self_childs->child[i].child, c->child, self_childs->child[i].parent - 1))) {
+      if(self_childs->child[i].child != c->child) {
+        //printf("overwrite child %d with %d\n",self_childs->child[i].child,c->child);
       }
-      memcpy(&childs->child[i], c, sizeof(struct child));
-      childs->child[i].t = systime;
+      memcpy(&self_childs->child[i], c, sizeof(struct child));
+      self_childs->child[i].t = systime;
       ret = MSG_TYPE_REGISTER_CHILD_OK;
       overloaded = false;
       break;
@@ -148,7 +108,7 @@ handle_register_child(chord_msg_t type,
   if (overloaded) {
     struct child* farthest = NULL;
     for (int i = 0; i < CHORD_TREE_CHILDS; i++) {
-      struct child* tmp = &childs->child[i];
+      struct child* tmp = &self_childs->child[i];
       if(c->child < CHORD_RING_SIZE/2 && tmp->child < CHORD_RING_SIZE/2 && c->child > tmp->child) {
         if(farthest == NULL || tmp->child > farthest->child) {
           farthest = tmp;
@@ -164,8 +124,8 @@ handle_register_child(chord_msg_t type,
       ret = MSG_TYPE_REGISTER_CHILD_OK;
       overloaded = false;
     } else {
-      if(!node_is_null(mynode->additional->predecessor)) {
-        retnode = mynode->additional->predecessor;
+      if(!node_is_null(self->additional->predecessor)) {
+        retnode = self->additional->predecessor;
         ret = MSG_TYPE_REGISTER_CHILD_REDIRECT;
         overloaded = false;
       } else {
@@ -191,17 +151,16 @@ handle_exit(chord_msg_t type,
   assert(data);
   (void)type;
   (void)msg_size;
-  struct node *mynode = get_own_node();
-  assert(mynode);
+  assert(self);
   struct node* update = (struct node*)data;
   memcpy(update, data, sizeof(struct node));
   remove_dead_node(update->id);
-  if (src == mynode->additional->successor->id && update->id != mynode->id &&
+  if (src == self->additional->successor->id && update->id != self->id &&
       !node_is_null(update)) {
-    copy_node(update, mynode->additional->successor);
-  } else if (src == mynode->additional->predecessor->id && update->id != mynode->id &&
+    copy_node(update, self->additional->successor);
+  } else if (src == self->additional->predecessor->id && update->id != self->id &&
              !node_is_null(update)) {
-    copy_node(update, mynode->additional->predecessor);
+    copy_node(update, self->additional->predecessor);
   }
   unsigned char msg[CHORD_HEADER_SIZE];
   marshal_msg(MSG_TYPE_EXIT_ACK, src, 0, NULL, msg);
@@ -220,24 +179,23 @@ handle_find_successor(chord_msg_t type,
   assert(msg_size > 0);
   (void)type;
   (void)msg_size;
-  struct node *mynode = get_own_node();
-  assert(mynode);
+  assert(self);
   nodeid_t req_id;
   chord_msg_t response_type = MSG_TYPE_FIND_SUCCESSOR_RESP;
   memcpy(&req_id, (nodeid_t*)data, sizeof(req_id));
-  DEBUG(DEBUG, "req_id is %d my_id is %d from %d\n", req_id, mynode->id, src);
+  DEBUG(DEBUG, "req_id is %d my_id is %d from %d\n", req_id, self->id, src);
   struct node successor;
   memset(&successor, 0, sizeof(successor));
-  if (!node_is_null(mynode->additional->successor) &&
-             in_interval(mynode, mynode->additional->successor, req_id)) {
-    copy_node(mynode->additional->successor, &successor);
+  if (!node_is_null(self->additional->successor) &&
+             in_interval(self, self->additional->successor, req_id)) {
+    copy_node(self->additional->successor, &successor);
   } else {
     response_type = MSG_TYPE_FIND_SUCCESSOR_RESP_NEXT;
     if (type == MSG_TYPE_FIND_SUCCESSOR) {
       struct node* next = closest_preceeding_node(req_id);
       copy_node(next, &successor);
     } else if (type == MSG_TYPE_FIND_SUCCESSOR_LINEAR) {
-      copy_node(mynode->additional->successor, &successor);
+      copy_node(self->additional->successor, &successor);
     }
   }
   assert(!node_is_null(&successor));
@@ -263,16 +221,15 @@ handle_get_predecessor(chord_msg_t type,
   unsigned char msg[CHORD_HEADER_SIZE + sizeof(struct node)];
   chord_msg_t response_type;
   size_t size = 0;
-  struct node *mynode = get_own_node();
-  assert(mynode && mynode->additional);
-  if (!node_is_null(mynode->additional->predecessor)) {
+  assert(self && self->additional);
+  if (!node_is_null(self->additional->predecessor)) {
     response_type = MSG_TYPE_GET_PREDECESSOR_RESP;
     size = sizeof(struct node);
   } else {
     response_type = MSG_TYPE_GET_PREDECESSOR_RESP_NULL;
   }
   marshal_msg(
-    response_type, src, size, (unsigned char*)mynode->additional->predecessor, msg);
+    response_type, src, size, (unsigned char*)self->additional->predecessor, msg);
     return chord_send_nonblock_sock(msg, CHORD_HEADER_SIZE+size, s);
 
 }
@@ -290,22 +247,21 @@ handle_notify(chord_msg_t type,
   assert(msg_size == sizeof(struct node));
   (void)src;
   (void)s;
-  struct node *mynode = get_own_node();
-  assert(mynode);
+  assert(self);
   struct node n;
   memcpy(&n, data, sizeof(struct node));
-  DEBUG(INFO, "get notify from %d curr is: %d\n", n.id, mynode->additional->predecessor->id);
+  DEBUG(INFO, "get notify from %d curr is: %d\n", n.id, self->additional->predecessor->id);
   if (is_pre(n.id)) {
-    if (!node_is_null(mynode->additional->predecessor)) {
+    if (!node_is_null(self->additional->predecessor)) {
       DEBUG(INFO,
             "got notify update pre old %d new %d\n",
-            mynode->additional->predecessor->id,
+            self->additional->predecessor->id,
             n.id);
     } else {
       DEBUG(INFO, "got notify update pre old nil new %d\n", n.id);
     }
-    copy_node(&n, mynode->additional->predecessor);
-    assert(mynode->additional->predecessor && n.id == mynode->additional->predecessor->id);
+    copy_node(&n, self->additional->predecessor);
+    assert(self->additional->predecessor && n.id == self->additional->predecessor->id);
   }
   return CHORD_OK;
 }
