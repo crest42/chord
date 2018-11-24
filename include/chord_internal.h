@@ -1,18 +1,12 @@
 #ifndef _LIBCHORD_INT_H
 #define _LIBCHORD_INT_H
 #include "chord.h"
+#include "msg_handler.h"
 
 time_t time_start;
 time_t atm;
 size_t read_b;
 size_t write_b;
-
-// euclidean mod because -1 % n should be n-1 not 1
-static int
-mod(int a, int b)
-{
-  return ((a % b) + b) % b;
-}
 
 struct chord_callbacks cc = { .ping_handler = handle_ping,
                               .exit_handler = handle_exit,
@@ -30,7 +24,7 @@ struct chord_callbacks *get_callbacks(void) {
   return &cc;
 }
 
-struct node null_node = { .id = 0,
+chord_node_t null_node = { .id = 0,
                           .size = 0,
                           .used = 0
                         };

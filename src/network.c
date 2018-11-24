@@ -1,12 +1,10 @@
 #include "../include/chord.h"
 #include "../include/network.h"
 
-extern struct node mynode;
-extern struct node *self;
-extern struct node successorlist[SUCCESSORLIST_SIZE];
+extern chord_node_t mynode, *self, successorlist[SUCCESSORLIST_SIZE];
 
 #ifdef POSIX_SOCK
-int sock_wrapper_open(struct socket_wrapper *wrapper,struct node *node,struct node *target,int local_port,int remote_port){
+int sock_wrapper_open(struct socket_wrapper *wrapper,chord_node_t *node,chord_node_t *target,int local_port,int remote_port){
   return CHORD_OK;
 }
 int sock_wrapper_recv(struct socket_wrapper *wrapper,unsigned char *buf, size_t buf_size,int flags) {
@@ -37,19 +35,11 @@ int addr_to_bin(struct in6_addr *to, const char *from) {
 }
 
 int
-addr_to_node(struct node* node, const char *addr)
+addr_to_node(chord_node_t *node, const char *addr)
 {
   assert(node != NULL);
   assert(addr != NULL);
   return addr_to_bin(&node->addr, addr);
-}
-
-int
-chord_send_nonblock_sock(unsigned char* msg,
-                         size_t size,
-                         struct socket_wrapper *s)
-{
-  return sock_wrapper_send(s, msg, size);
 }
 
 int
@@ -136,7 +126,7 @@ demarshal_msg(unsigned char* buf,
 }
 
 int
-wait_for_message(struct node* node, struct socket_wrapper *s)
+wait_for_message(chord_node_t *node, struct socket_wrapper *s)
 {
   (void)node;
   chord_msg_t type;
@@ -281,10 +271,10 @@ wait_for_message(struct node* node, struct socket_wrapper *s)
       }
       break;
     case MSG_TYPE_COPY_SUCCESSORLIST: {
-      unsigned char msg[CHORD_HEADER_SIZE + (sizeof(struct node) * (SUCCESSORLIST_SIZE-1))];
+      unsigned char msg[CHORD_HEADER_SIZE + (sizeof(chord_node_t) * (SUCCESSORLIST_SIZE-1))];
       marshal_msg(MSG_TYPE_COPY_SUCCESSORLIST_RESP,
                    src_id,
-                    (sizeof(struct node) * (SUCCESSORLIST_SIZE-1)),
+                    (sizeof(chord_node_t) * (SUCCESSORLIST_SIZE-1)),
                    (unsigned char*)successorlist,
                    msg);
       ret = chord_send_nonblock_sock(msg,
@@ -318,4 +308,93 @@ wait_for_message(struct node* node, struct socket_wrapper *s)
       break;
   }
   return CHORD_OK;
+}
+
+int
+chord_send_block_and_wait(chord_node_t *target,
+                          unsigned char* msg,
+                          size_t size,
+                          chord_msg_t wait,
+                          unsigned char* buf,
+                          size_t bufsize,
+                          size_t *ret_size)
+{
+  unsigned char read_buf[MAX_MSG_SIZE];
+  nodeid_t src_id, dst_id;
+  uint32_t msg_size;
+  unsigned char* msg_content;
+  struct socket_wrapper sock;
+  (void)memset(&sock, 0, sizeof(sock));
+  sock.any = false;
+  int s = sock_wrapper_open(
+    &sock, self, target, CHORD_PORT + 1, CHORD_PORT);
+  if (s == -1) {
+    DEBUG(ERROR, "socket: %s\n", strerror(errno));
+    return MSG_TYPE_CHORD_ERR;
+  }
+  DEBUG(DEBUG, "New socket %d\n", s);
+  DEBUG(DEBUG, "chord_send_block_and_wait new sock: %d\n", s);
+  int ret = 0;
+  while (ret < (int)size) {
+    int tmp = sock_wrapper_send(&sock, msg+ret, size-ret);
+    if (tmp < 0) {
+      DEBUG(ERROR, "write: %s", strerror(errno));
+      sock_wrapper_close(&sock);
+      return MSG_TYPE_CHORD_ERR;
+    }
+    ret += tmp;
+  }
+  if (wait == MSG_TYPE_NO_WAIT) {
+    sock_wrapper_close(&sock);
+    return MSG_TYPE_NO_WAIT;
+  }
+
+  chord_msg_t type = 0;
+
+  DEBUG(DEBUG, "Wait for answer\n");
+
+  ret = sock_wrapper_recv(&sock,read_buf,MAX_MSG_SIZE,TIMEOUT_DEF);
+
+  DEBUG(INFO, "Got %d\n", ret);
+  if (ret < (int)CHORD_HEADER_SIZE) {
+    DEBUG(ERROR,
+          "Error in recv: %s (received) %d < (CHORD_HEADER_SIZE) %d\n",
+          strerror(errno),
+          ret,
+          CHORD_HEADER_SIZE);
+    sock_wrapper_close(&sock);
+    return MSG_TYPE_CHORD_ERR;
+  }
+  demarshal_msg(read_buf, &type, &src_id, &dst_id, &msg_size, &msg_content);
+  DEBUG(INFO,
+        "Found Msg type %s (%d) from %d to %d size %d. Wait for: %s (%d)\n",
+        msg_to_string(type),
+        type,
+        src_id,
+        dst_id,
+        (int)msg_size,
+        msg_to_string(wait),
+        wait);
+  assert((int)type >= 0);
+  assert((int)src_id > 0);
+  assert((int)dst_id > 0);
+  assert((int)msg_size >= 0);
+  assert((int)msg_size <= (int)MAX_MSG_SIZE);
+  if (msg_size > bufsize) {
+    msg_size = bufsize;
+  }
+  assert(buf != NULL);
+  memcpy(buf, msg_content, msg_size);
+  if(ret_size)
+    *ret_size = msg_size;
+  sock_wrapper_close(&sock);
+  return type;
+}
+
+int
+chord_send_nonblock_sock(unsigned char* msg,
+                         size_t size,
+                         struct socket_wrapper *s)
+{
+  return sock_wrapper_send(s, msg, size);
 }

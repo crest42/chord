@@ -2,12 +2,12 @@
 #include "../include/bootstrap.h"
 #include "../include/network.h"
 
-extern struct node* self;
+extern chord_node_t *self;
 extern struct bootstrap_list bslist;
 int
 fill_bslist_mcast(const char* addr, uint32_t max, uint32_t timeout)
 {
-  struct node mcast_node = {.id = 0, .size = 0,.used = 0};
+  chord_node_t mcast_node = {.id = 0, .size = 0,.used = 0};
   addr_to_node(&mcast_node, addr);
   unsigned char msg[CHORD_HEADER_SIZE + sizeof(nodeid_t)];
   unsigned char read_buf[CHORD_HEADER_SIZE + sizeof(nodeid_t)];
@@ -58,10 +58,11 @@ int fill_bslist_ll_mcast(uint32_t max, uint32_t timeout) {
 }
 
 int add_node_to_bslist(struct in6_addr *addr) {
-  if (bslist.curr == bslist.size) {
+  if (bslist.curr == bslist.size-1) {
     return CHORD_ERR;
   }
   uint32_t pos = bslist.curr++;
+  assert(pos < 16);
   memcpy(&bslist.list[pos], addr, sizeof(struct in6_addr));
   return CHORD_OK;
 }

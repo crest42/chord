@@ -1,9 +1,24 @@
 #include "../include/chord.h"
+#include "../include/chord_util.h"
 #include "../include/network.h"
 //#include <stdio.h> //TODO:REMOVE
-extern struct node* self;
+extern chord_node_t *self;
 extern struct childs *self_childs;
-extern struct aggregate* mystats;
+extern chord_aggregation_t* mystats;
+extern chord_node_t successorlist[SUCCESSORLIST_SIZE];
+extern struct fingertable_entry fingertable[FINGERTABLE_SIZE];
+
+
+
+static uint32_t
+chord_abs(nodeid_t a, nodeid_t b)
+{
+  if (b < a) {
+    return CHORD_RING_SIZE - a + b;
+  } else {
+    return b - a;
+  }
+}
 
 static bool
 is_pre(nodeid_t id)
@@ -48,7 +63,7 @@ handle_refresh_child(chord_msg_t type,
   assert(type == MSG_TYPE_REFRESH_CHILD);
   assert(msg_size > 0);
   struct child* c = (struct child*)data;
-  struct node *retnode = self;
+  chord_node_t *retnode = self;
   time_t systime = time(NULL);
   chord_msg_t ret = MSG_TYPE_REGISTER_CHILD_EWRONG;
   for (int i = 0; i < CHORD_TREE_CHILDS; i++) {
@@ -60,10 +75,10 @@ handle_refresh_child(chord_msg_t type,
     }
   }
 
-  unsigned char msg[CHORD_HEADER_SIZE + sizeof(struct node)+ sizeof(struct aggregate)];
+  unsigned char msg[CHORD_HEADER_SIZE + sizeof(chord_node_t)+ sizeof(chord_aggregation_t)];
   marshal_msg(
-    ret, src, sizeof(struct node), (unsigned char *)retnode, msg);
-  add_msg_cont((unsigned char *)mystats, msg,sizeof(struct aggregate), CHORD_HEADER_SIZE + sizeof(struct node));
+    ret, src, sizeof(chord_node_t), (unsigned char *)retnode, msg);
+  add_msg_cont((unsigned char *)mystats, msg,sizeof(chord_aggregation_t), CHORD_HEADER_SIZE + sizeof(chord_node_t));
 
   return chord_send_nonblock_sock(msg, sizeof(msg), s);
 }
@@ -81,7 +96,7 @@ handle_register_child(chord_msg_t type,
   (void)type;
   (void)msg_size;
   struct child* c = (struct child*)data;
-  struct node *retnode = self;
+  chord_node_t *retnode = self;
   time_t systime = time(NULL);
   chord_msg_t ret = MSG_TYPE_REGISTER_CHILD_EFULL;
   bool overloaded = true;
@@ -133,9 +148,9 @@ handle_register_child(chord_msg_t type,
       }
     }
   }
-  unsigned char msg[CHORD_HEADER_SIZE + sizeof(struct node) + sizeof(struct aggregate)];
-  marshal_msg(ret, src, sizeof(struct node), (unsigned char *)retnode, msg);
-  add_msg_cont((unsigned char *)mystats, msg,sizeof(struct aggregate), CHORD_HEADER_SIZE + sizeof(struct node));
+  unsigned char msg[CHORD_HEADER_SIZE + sizeof(chord_node_t) + sizeof(chord_aggregation_t)];
+  marshal_msg(ret, src, sizeof(chord_node_t), (unsigned char *)retnode, msg);
+  add_msg_cont((unsigned char *)mystats, msg,sizeof(chord_aggregation_t), CHORD_HEADER_SIZE + sizeof(chord_node_t));
   return chord_send_nonblock_sock(msg, sizeof(msg), s);
 }
 
@@ -152,8 +167,8 @@ handle_exit(chord_msg_t type,
   (void)type;
   (void)msg_size;
   assert(self);
-  struct node* update = (struct node*)data;
-  memcpy(update, data, sizeof(struct node));
+  chord_node_t *update = (chord_node_t *)data;
+  memcpy(update, data, sizeof(chord_node_t));
   remove_dead_node(update->id);
   if (src == get_successor()->id && update->id != self->id &&
       !node_is_null(update)) {
@@ -165,6 +180,32 @@ handle_exit(chord_msg_t type,
   unsigned char msg[CHORD_HEADER_SIZE];
   marshal_msg(MSG_TYPE_EXIT_ACK, src, 0, NULL, msg);
   return chord_send_nonblock_sock(msg, sizeof(msg), s);
+}
+
+
+/*@null@*/ static chord_node_t *closest_preceeding_node(nodeid_t id)
+{
+  nodeid_t minabs = __INT_MAX__;
+  chord_node_t *retnode = NULL;
+  for (int i = 0; i < FINGERTABLE_SIZE; i++) {
+    if (!node_is_null(&fingertable[i].node)) {
+      nodeid_t finger_abs = chord_abs(fingertable[i].node.id, id);
+      if (finger_abs < minabs) {
+        minabs = finger_abs;
+        retnode = &fingertable[i].node;
+      }
+    }
+  }
+  for (int i = 0; i < SUCCESSORLIST_SIZE; i++) {
+    if (!node_is_null(&successorlist[i])) {
+      nodeid_t finger_abs = chord_abs(successorlist[i].id, id);
+      if (finger_abs < minabs) {
+        minabs = finger_abs;
+        retnode = &successorlist[i];
+      }
+    }
+  }
+  return retnode;
 }
 
 int
@@ -184,7 +225,7 @@ handle_find_successor(chord_msg_t type,
   chord_msg_t response_type = MSG_TYPE_FIND_SUCCESSOR_RESP;
   memcpy(&req_id, (nodeid_t*)data, sizeof(req_id));
   DEBUG(DEBUG, "req_id is %d my_id is %d from %d\n", req_id, self->id, src);
-  struct node successor;
+  chord_node_t successor;
   memset(&successor, 0, sizeof(successor));
   if (!node_is_null(get_successor()) &&
              in_interval(self, get_successor(), req_id)) {
@@ -192,16 +233,16 @@ handle_find_successor(chord_msg_t type,
   } else {
     response_type = MSG_TYPE_FIND_SUCCESSOR_RESP_NEXT;
     if (type == MSG_TYPE_FIND_SUCCESSOR) {
-      struct node* next = closest_preceeding_node(req_id);
+      chord_node_t *next = closest_preceeding_node(req_id);
       copy_node(next, &successor);
     } else if (type == MSG_TYPE_FIND_SUCCESSOR_LINEAR) {
       copy_node(get_successor(), &successor);
     }
   }
   assert(!node_is_null(&successor));
-  unsigned char msg[CHORD_HEADER_SIZE + sizeof(struct node)];
+  unsigned char msg[CHORD_HEADER_SIZE + sizeof(chord_node_t)];
   marshal_msg(
-    response_type, src, sizeof(struct node), (unsigned char*)&successor, msg);
+    response_type, src, sizeof(chord_node_t), (unsigned char*)&successor, msg);
   return chord_send_nonblock_sock(msg, sizeof(msg), s);
 }
 
@@ -218,12 +259,12 @@ handle_get_predecessor(chord_msg_t type,
   assert(type == MSG_TYPE_GET_PREDECESSOR);
   assert(!data);
   assert(msg_size == 0);
-  unsigned char msg[CHORD_HEADER_SIZE + sizeof(struct node)];
+  unsigned char msg[CHORD_HEADER_SIZE + sizeof(chord_node_t)];
   chord_msg_t response_type;
   size_t size = 0;
   if (!node_is_null(get_predecessor())) {
     response_type = MSG_TYPE_GET_PREDECESSOR_RESP;
-    size = sizeof(struct node);
+    size = sizeof(chord_node_t);
   } else {
     response_type = MSG_TYPE_GET_PREDECESSOR_RESP_NULL;
   }
@@ -243,12 +284,12 @@ handle_notify(chord_msg_t type,
   (void)type;
   (void)msg_size;
   assert(type == MSG_TYPE_NOTIFY);
-  assert(msg_size == sizeof(struct node));
+  assert(msg_size == sizeof(chord_node_t));
   (void)src;
   (void)s;
   assert(self);
-  struct node n;
-  memcpy(&n, data, sizeof(struct node));
+  chord_node_t n;
+  memcpy(&n, data, sizeof(chord_node_t));
   DEBUG(INFO, "get notify from %d curr is: %d\n", n.id, get_predecessor()->id);
   if (is_pre(n.id)) {
     if (!node_is_null(get_predecessor())) {
