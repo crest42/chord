@@ -1,6 +1,8 @@
 #include "../include/chord.h"
 #include "../include/network.h"
 
+unsigned char wait_buf[MAX_MSG_SIZE];
+
 extern chord_node_t mynode, *self, successorlist[SUCCESSORLIST_SIZE];
 
 #ifdef POSIX_SOCK
@@ -17,7 +19,6 @@ int sock_wrapper_close(struct socket_wrapper *wrapper) {
   return CHORD_OK;
 }
 #endif
-
 
 int addr_to_bin(struct in6_addr *to, const char *from) {
   int ret = inet_pton(AF_INET6, from, to);
@@ -41,6 +42,7 @@ addr_to_node(chord_node_t *node, const char *addr)
   assert(addr != NULL);
   return addr_to_bin(&node->addr, addr);
 }
+
 
 int
 add_msg_cont(unsigned char* data, unsigned char* to, uint32_t size,size_t size_existing) {
@@ -119,7 +121,7 @@ demarshal_msg(unsigned char* buf,
     memcpy(&tmp, &buf[CHORD_MSG_LENGTH_SLOT], CHORD_MSG_LENGTH_SIZE);
     *size = ntohl(tmp);
   }
-  if (content) {
+  if (content && *size > 0) {
     *content = &buf[CHORD_HEADER_SIZE];
   }
   return CHORD_OK;
@@ -132,15 +134,14 @@ wait_for_message(chord_node_t *node, struct socket_wrapper *s)
   chord_msg_t type;
   uint32_t size;
   nodeid_t src_id, dst_id;
-  unsigned char* content;
-  unsigned char buf[MAX_MSG_SIZE];
+  unsigned char* content = NULL;
 
   #ifdef RIOT
   int flags = SOCK_NO_TIMEOUT;
   #else
   int flags = 0;
   #endif
-  int ret = sock_wrapper_recv(s, buf, sizeof(buf), flags);
+  int ret = sock_wrapper_recv(s, wait_buf, sizeof(wait_buf), flags);
   if (ret < (int)CHORD_HEADER_SIZE) {
     DEBUG(ERROR,
           "Error in recv: %s (recieved) %d < (CHORD_HEADER_SIZE) %d ",
@@ -149,165 +150,25 @@ wait_for_message(chord_node_t *node, struct socket_wrapper *s)
           (int)CHORD_HEADER_SIZE);
     return CHORD_ERR;
   }
-  demarshal_msg(buf, &type, &src_id, &dst_id, &size, &content);
+  demarshal_msg(wait_buf, &type, &src_id, &dst_id, &size, &content);
   DEBUG(INFO,
-        "Got %s Request with size %u from %d to %d\n",
+        "Got %s Request with size %u from %d to %d buf: %p\n",
         msg_to_string(type),
         (int)size,
         src_id,
-        dst_id);
+        dst_id,
+        (void *)content);
   if(size > (uint32_t)ret) {
     //assert(false);
     return CHORD_OK;
   }
-  struct chord_callbacks *cc = get_callbacks();
-  switch (type) {
-    case MSG_TYPE_FIND_SUCCESSOR_LINEAR:
-    case MSG_TYPE_FIND_SUCCESSOR:
-      ret = cc->find_successor_handler(type,
-                                      content,
-                                      src_id,
-                                      s,
-                                      size);
-      if (ret == CHORD_ERR) {
-        DEBUG(ERROR,
-              "Error while sending MSG_TYPE_FIND_SUCCESSOR_RESP nonblocking");
-      }
-      break;
-    case MSG_TYPE_PING:
-      ret = cc->ping_handler(type,
-                            content,
-                            src_id,
-                            s,
-                            size);
-      if (ret == CHORD_ERR) {
-        DEBUG(ERROR, "Error in send PONG\n");
-      }
-      break;
-          case MSG_TYPE_REGISTER_CHILD:
-      ret = cc->register_child_handler(type,
-                            content,
-                            src_id,
-                            s,
-                            size);
-      if (ret == CHORD_ERR) {
-        DEBUG(ERROR, "Error in REGISTER CHILD\n");
-      }
-      break;
-    case MSG_TYPE_REFRESH_CHILD:
-      ret = cc->refresh_child_handler(type,
-                            content,
-                            src_id,
-                            s,
-                            size);
-      if (ret == CHORD_ERR) {
-        DEBUG(ERROR, "Error in REGISTER CHILD\n");
-      }
-      break;
-    case MSG_TYPE_EXIT:
-      ret = cc->exit_handler(type,
-                            content,
-                            src_id,
-                            s,
-                            size);
-      if (ret == CHORD_ERR) {
-        DEBUG(ERROR, "Error in send PONG\n");
-      }
-      break;
-    case MSG_TYPE_GET_PREDECESSOR:
-
-      ret = cc->get_predecessor_handler(type,
-                                       NULL,
-                                       src_id,
-                                       s,
-                                       size);
-      if (ret == CHORD_ERR) {
-        DEBUG(ERROR,
-              "Error while sending MSG_TYPE_FIND_SUCCESSOR_RESP_NEXT "
-              "nonblocking");
-      }
-      break;
-    case MSG_TYPE_NOTIFY:
-      cc->notify_handler(type,
-                        content,
-                        src_id,
-                        s,
-                        size);
-      break;
-    case MSG_TYPE_SYNC:
-      if(cc->sync_handler) {
-        cc->sync_handler(type,
-                        content,
-                        src_id,
-                        s,
-                        size);
-      }
-    break;
-    case MSG_TYPE_SYNC_REQ_FETCH:
-      if(cc->sync_fetch_handler) {
-        cc->sync_fetch_handler(type,
-                        content,
-                        src_id,
-                        s,
-                        size);
-      }
-    break;
-    case MSG_TYPE_PUT:
-      if (cc->put_handler) {
-        cc->put_handler(type,
-                        content,
-                        src_id,
-                        s,
-                        size);
-      }
-      break;
-    case MSG_TYPE_GET:
-      if (cc->get_handler) {
-        cc->get_handler(type,
-                        content,
-                        src_id,
-                        s,
-                        size);
-      }
-      break;
-    case MSG_TYPE_COPY_SUCCESSORLIST: {
-      unsigned char msg[CHORD_HEADER_SIZE + (sizeof(chord_node_t) * (SUCCESSORLIST_SIZE-1))];
-      marshal_msg(MSG_TYPE_COPY_SUCCESSORLIST_RESP,
-                   src_id,
-                    (sizeof(chord_node_t) * (SUCCESSORLIST_SIZE-1)),
-                   (unsigned char*)successorlist,
-                   msg);
-      ret = chord_send_nonblock_sock(msg,
-                                     sizeof(msg),
-                                     s);
-      if (ret == CHORD_ERR) {
-        DEBUG(ERROR,
-              "Error while sending MSG_TYPE_COPY_SUCCESSORLIST_RESP\n");
-      }
-      break;
-    }
-    case MSG_TYPE_GET_SUCCESSORLIST_ID: {
-      uint32_t offset = 0;
-      unsigned char msg[CHORD_HEADER_SIZE + (SUCCESSORLIST_SIZE*sizeof(nodeid_t))];
-      marshal_msg(MSG_TYPE_GET_SUCCESSORLIST_ID_RESP,src_id,offset,NULL,msg);
-      offset += CHORD_HEADER_SIZE;
-      for(int i = 0;i<SUCCESSORLIST_SIZE;i++) {
-        add_msg_cont((unsigned char *)&(successorlist[i].id),msg,sizeof(nodeid_t),offset);
-        offset += sizeof(nodeid_t);
-      }
-      ret = chord_send_nonblock_sock(msg,
-                                     sizeof(msg),
-                                      s);
-      if (ret == CHORD_ERR) {
-        DEBUG(ERROR, "Error while sending MSG_TYPE_GET_SUCCESSORLIST_ID_RESP");
-      }
-      break;
-    }
-    default:
-      return CHORD_OK;
-      break;
+  assert(type >= 0);
+  assert(type < 32);
+  chord_callback c = get_callback(type);
+  if (c == NULL) {
+    c = default_handler;
   }
-  return CHORD_OK;
+  return c(type, content, src_id, s, size);
 }
 
 int

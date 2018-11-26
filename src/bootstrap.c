@@ -31,7 +31,8 @@ fill_bslist_mcast(const char* addr, uint32_t max, uint32_t timeout)
     return MSG_TYPE_CHORD_ERR;
   }
   uint32_t i = 0;
-  while (i<max) {
+  memset(&sock.sock.remote,0,sizeof(sock.remote));
+  while (i < max) {
     int ret = sock_wrapper_recv(&sock, read_buf, sizeof(read_buf), TIMEOUT(timeout));
     if (ret < (int)CHORD_HEADER_SIZE) {
       if(ret < 0) {

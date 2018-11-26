@@ -24,12 +24,6 @@
 #define TIMEOUT (2)
 #endif
 
-/** Defines if DEBUG Function and macros should be enabled. */
-#ifdef DEBUG_ENABLE
-#include <errno.h>
-#include <stdio.h>
-
-
 typedef enum log_level
 {
   OFF = 0x0,
@@ -41,6 +35,11 @@ typedef enum log_level
   TRACE = 0x3f,
   ALL = 0xff
 } chord_log_level_t;
+
+/** Defines if DEBUG Function and macros should be enabled. */
+#ifdef DEBUG_ENABLE
+#include <errno.h>
+#include <stdio.h>
 
 void
 debug_printf(unsigned long t,
@@ -109,44 +108,44 @@ typedef enum msg_type
   MSG_TYPE_CHORD_ERR = -1, /*!< Error return type for failed requests */
   MSG_TYPE_NULL = 0,
   MSG_TYPE_FIND_SUCCESSOR = 1,           /*!< FIND_SUCCESSOR for given id */
-  MSG_TYPE_FIND_SUCCESSOR_RESP = 2,      /*!< Response to FIND_SUCCESSOR */
-  MSG_TYPE_FIND_SUCCESSOR_RESP_NEXT = 3, /*!< Next node we need to ask  */
-  MSG_TYPE_GET_PREDECESSOR = 4,      /*!< GET_PREDECESSOR of the target node*/
-  MSG_TYPE_GET_PREDECESSOR_RESP = 5, /*!< Response to GET_PREDECESSOR */
-  MSG_TYPE_GET_PREDECESSOR_RESP_NULL = 6, /*!< NULL Response to GET_PRE */
-  MSG_TYPE_GET_SUCCESSOR = 7,
-  MSG_TYPE_GET_SUCCESSOR_RESP = 8,
-  MSG_TYPE_PING = 9, /*!< Check if node is alive */
-  MSG_TYPE_PONG = 10,
-  MSG_TYPE_NOTIFY = 11,  /*!< Notify successor that we may be the predecessor */
-  MSG_TYPE_NO_WAIT = 12, /*!< Dummy Type which indicated one-shot */
-  MSG_TYPE_COPY_SUCCESSORLIST = 13,      /*!< Request to copy successorlist */
-  MSG_TYPE_COPY_SUCCESSORLIST_RESP = 14, /*!< Response which holds suc. list */
-  MSG_TYPE_EXIT = 15,
-  MSG_TYPE_EXIT_ACK = 16,
-  MSG_TYPE_GET = 17,
-  MSG_TYPE_PUT = 18,
-  MSG_TYPE_PUT_ACK = 19,
-  MSG_TYPE_PUT_EFAIL = 20,
-  MSG_TYPE_GET_RESP = 21,
-  MSG_TYPE_GET_EFAIL = 22,
-  MSG_TYPE_FIND_SUCCESSOR_LINEAR = 23,
-  MSG_TYPE_REGISTER_CHILD = 24,
-  MSG_TYPE_REGISTER_CHILD_OK = 25,
-  MSG_TYPE_REGISTER_CHILD_EFULL = 26,
-  MSG_TYPE_REGISTER_CHILD_EWRONG = 27,
-  MSG_TYPE_REGISTER_CHILD_REDIRECT = 28,
-  MSG_TYPE_REFRESH_CHILD = 29,
-  MSG_TYPE_REFRESH_CHILD_OK = 30,
-  MSG_TYPE_REFRESH_CHILD_REDIRECT = 31,
-  MSG_TYPE_GET_SUCCESSORLIST_ID = 32,
-  MSG_TYPE_GET_SUCCESSORLIST_ID_RESP = 33,
-  MSG_TYPE_GET_SUCCESSORLIST_ID_EFAIL = 34,
-  MSG_TYPE_SYNC = 35,
-  MSG_TYPE_SYNC_REQ_RESP = 36,
-  MSG_TYPE_SYNC_REQ_FETCH = 37,
-  MSG_TYPE_SYNC_REQ_FETCH_OK = 38,
-  MSG_TYPE_PUSH = 39,
+  MSG_TYPE_FIND_SUCCESSOR_LINEAR = 2,
+  MSG_TYPE_GET_PREDECESSOR = 3,      /*!< GET_PREDECESSOR of the target node*/
+  MSG_TYPE_GET_SUCCESSOR = 4,
+  MSG_TYPE_PING = 5, /*!< Check if node is alive */
+  MSG_TYPE_PONG = 6,
+  MSG_TYPE_NOTIFY = 7,  /*!< Notify successor that we may be the predecessor */
+  MSG_TYPE_COPY_SUCCESSORLIST = 8,      /*!< Request to copy successorlist */
+  MSG_TYPE_GET = 9,
+  MSG_TYPE_PUT = 10,
+  MSG_TYPE_REGISTER_CHILD = 11,
+  MSG_TYPE_REFRESH_CHILD = 12,
+  MSG_TYPE_REFRESH_CHILD_OK = 13,
+  MSG_TYPE_SYNC = 14,
+  MSG_TYPE_PUSH = 15,
+  MSG_TYPE_GET_SUCCESSORLIST_ID = 16,
+  MSG_TYPE_EXIT = 17,
+  MSG_TYPE_SYNC_REQ_FETCH = 18,
+  MSG_TYPE_FIND_SUCCESSOR_RESP = 64,      /*!< Response to FIND_SUCCESSOR */
+  MSG_TYPE_FIND_SUCCESSOR_RESP_NEXT = 65, /*!< Next node we need to ask  */
+  MSG_TYPE_GET_PREDECESSOR_RESP = 66, /*!< Response to GET_PREDECESSOR */
+  MSG_TYPE_GET_PREDECESSOR_RESP_NULL = 67, /*!< NULL Response to GET_PRE */
+  MSG_TYPE_GET_SUCCESSOR_RESP = 68,
+  MSG_TYPE_NO_WAIT = 69, /*!< Dummy Type which indicated one-shot */
+  MSG_TYPE_COPY_SUCCESSORLIST_RESP = 70, /*!< Response which holds suc. list */
+  MSG_TYPE_EXIT_ACK = 71,
+  MSG_TYPE_PUT_ACK = 72,
+  MSG_TYPE_PUT_EFAIL = 73,
+  MSG_TYPE_GET_RESP = 74,
+  MSG_TYPE_GET_EFAIL = 75,
+  MSG_TYPE_REGISTER_CHILD_OK = 76,
+  MSG_TYPE_REGISTER_CHILD_EFULL = 77,
+  MSG_TYPE_REGISTER_CHILD_EWRONG = 78,
+  MSG_TYPE_REGISTER_CHILD_REDIRECT = 79,
+  MSG_TYPE_REFRESH_CHILD_REDIRECT = 80,
+  MSG_TYPE_GET_SUCCESSORLIST_ID_RESP = 81,
+  MSG_TYPE_GET_SUCCESSORLIST_ID_EFAIL = 82,
+  MSG_TYPE_SYNC_REQ_RESP = 83,
+  MSG_TYPE_SYNC_REQ_FETCH_OK = 85
 } chord_msg_t;
 
 /**
@@ -216,36 +215,12 @@ struct fingertable_entry
   chord_node_t node;  /*!< Pointer to a node who is the successor of end */
 };
 
-typedef int (*chord_callback)(chord_msg_t,
-                              unsigned char*,
-                              nodeid_t,
-                              struct socket_wrapper *,
-                              size_t);
-
 typedef int(*chord_periodic_hook)(void *);
 
 typedef struct hooks {
   chord_periodic_hook periodic_hook;
   void* periodic_data;
 } chord_hooks_t;
-
-struct chord_callbacks
-{
-  chord_callback ping_handler;
-  chord_callback exit_handler;
-  chord_callback find_successor_handler;
-  chord_callback get_predecessor_handler;
-  chord_callback notify_handler;
-  chord_callback put_handler;
-  chord_callback get_handler;
-  chord_callback register_child_handler;
-  chord_callback refresh_child_handler;
-  chord_callback sync_handler;
-  chord_callback sync_fetch_handler;
-};
-
-struct chord_callbacks*
-get_callbacks(void);
 
 /**
  * \brief Set up a node struct from a given address

@@ -7,6 +7,7 @@
  */
 #ifndef _LIBCHORD_NETWORK_H
 #define _LIBCHORD_NETWORK_H
+#include "msg_handler.h"
 
 int
 wait_for_message(chord_node_t *node, struct socket_wrapper *s);

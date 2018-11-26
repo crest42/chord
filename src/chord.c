@@ -22,7 +22,7 @@ struct fingertable_entry fingertable[FINGERTABLE_SIZE];
 chord_node_t successorlist[SUCCESSORLIST_SIZE];
 struct childs childs, *self_childs = &childs;
 chord_aggregation_t stats, *mystats = &stats;
-struct hooks hooks;
+chord_hooks_t hooks;
 struct bootstrap_list bslist;
 
 /* Static functions */
@@ -679,6 +679,7 @@ start(/*@NULL@*/ chord_node_t *node)
 }
 
 /* Public functions */
+
 chord_node_t *get_own_node(void) {
   return self;
 }
@@ -691,7 +692,7 @@ chord_node_t *get_predecessor(void) {
   return my_additional.predecessor;
 }
 
-struct hooks *get_hooks(void) {
+chord_hooks_t *get_hooks(void) {
   return &hooks;
 }
 
@@ -746,7 +747,16 @@ init_chord(const char* local_addr)
   a->nodes = 0;
 
   hooks.periodic_hook = NULL;
-
+  init_callbacks();
+  set_callback(MSG_TYPE_PING, handle_ping);
+  set_callback(MSG_TYPE_EXIT, handle_exit);
+  set_callback(MSG_TYPE_FIND_SUCCESSOR, handle_find_successor);
+  set_callback(MSG_TYPE_FIND_SUCCESSOR_LINEAR, handle_find_successor);
+  set_callback(MSG_TYPE_GET_PREDECESSOR, handle_get_predecessor),
+  set_callback(MSG_TYPE_NOTIFY, handle_notify);
+  set_callback(MSG_TYPE_REGISTER_CHILD, handle_register_child);
+  set_callback(MSG_TYPE_REFRESH_CHILD, handle_refresh_child);
+  set_callback(MSG_TYPE_PUT, NULL);
   return CHORD_OK;
 }
 

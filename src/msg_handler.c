@@ -7,6 +7,7 @@ extern struct childs *self_childs;
 extern chord_aggregation_t* mystats;
 extern chord_node_t successorlist[SUCCESSORLIST_SIZE];
 extern struct fingertable_entry fingertable[FINGERTABLE_SIZE];
+chord_callback msg_handler[32];
 
 
 
@@ -31,6 +32,77 @@ is_pre(nodeid_t id)
     return true;
   }
   return false;
+}
+
+
+int init_callbacks(void) {
+  memset(msg_handler, 0, sizeof(msg_handler));
+  return CHORD_OK;
+}
+
+chord_callback get_callback(chord_msg_t number) {
+  assert(number >= 0);
+  assert(number < 32);
+  return msg_handler[number];
+}
+
+chord_callback set_callback(chord_msg_t number, chord_callback handler) {
+  assert(number >= 0);
+  assert(number < 32);
+  chord_callback old = msg_handler[number];
+  msg_handler[number] = handler;
+  return old;
+}
+
+int
+default_handler(chord_msg_t type,
+            unsigned char* data,
+            nodeid_t src,
+            struct socket_wrapper *s,
+            size_t msg_size)
+{
+  (void)data;
+  (void)msg_size;
+  int ret = 0;
+  switch (type) {
+    case MSG_TYPE_COPY_SUCCESSORLIST: {
+      unsigned char msg[CHORD_HEADER_SIZE + (sizeof(chord_node_t) * (SUCCESSORLIST_SIZE-1))];
+      marshal_msg(MSG_TYPE_COPY_SUCCESSORLIST_RESP,
+                   src,
+                    (sizeof(chord_node_t) * (SUCCESSORLIST_SIZE-1)),
+                   (unsigned char*)successorlist,
+                   msg);
+      ret = chord_send_nonblock_sock(msg,
+                                     sizeof(msg),
+                                     s);
+      if (ret == CHORD_ERR) {
+        DEBUG(ERROR,
+              "Error while sending MSG_TYPE_COPY_SUCCESSORLIST_RESP\n");
+      }
+      break;
+    }
+    case MSG_TYPE_GET_SUCCESSORLIST_ID: {
+      uint32_t offset = 0;
+      unsigned char msg[CHORD_HEADER_SIZE + (SUCCESSORLIST_SIZE*sizeof(nodeid_t))];
+      marshal_msg(MSG_TYPE_GET_SUCCESSORLIST_ID_RESP,src,offset,NULL,msg);
+      offset += CHORD_HEADER_SIZE;
+      for(int i = 0;i<SUCCESSORLIST_SIZE;i++) {
+        add_msg_cont((unsigned char *)&(successorlist[i].id),msg,sizeof(nodeid_t),offset);
+        offset += sizeof(nodeid_t);
+      }
+      ret = chord_send_nonblock_sock(msg,
+                                     sizeof(msg),
+                                      s);
+      if (ret == CHORD_ERR) {
+        DEBUG(ERROR, "Error while sending MSG_TYPE_GET_SUCCESSORLIST_ID_RESP");
+      }
+      break;
+    }
+    default:
+      return CHORD_OK;
+      break;
+  }
+  return CHORD_OK;
 }
 
 int
