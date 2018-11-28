@@ -24,7 +24,7 @@
 #include <unistd.h>
 #include <stdbool.h>
 #include <sys/socket.h>
-#define TIMEOUT (2)
+#define TIMEOUT(y) (y)
 #define TIMEOUT_DEF (2)
 #define CHORD_YIELD(...) {}
 #endif

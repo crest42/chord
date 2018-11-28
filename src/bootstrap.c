@@ -31,7 +31,9 @@ fill_bslist_mcast(const char* addr, uint32_t max, uint32_t timeout)
     return MSG_TYPE_CHORD_ERR;
   }
   uint32_t i = 0;
-  memset(&sock.sock.remote,0,sizeof(sock.remote));
+  #ifdef RIOT
+    memset(&sock.sock.remote,0,sizeof(sock.remote));
+  #endif
   while (i < max) {
     int ret = sock_wrapper_recv(&sock, read_buf, sizeof(read_buf), TIMEOUT(timeout));
     if (ret < (int)CHORD_HEADER_SIZE) {
@@ -44,9 +46,15 @@ fill_bslist_mcast(const char* addr, uint32_t max, uint32_t timeout)
     chord_msg_t type;
     demarshal_msg(read_buf, &type, NULL, NULL, NULL, NULL);
       if(type == MSG_TYPE_PONG) {
+        #ifdef RIOT
         if(add_node_to_bslist((struct in6_addr*)&sock.remote.addr.ipv6) != CHORD_OK) {
           break;
         }
+        #else
+        if(add_node_to_bslist((struct in6_addr*)&sock.remote) != CHORD_OK) {
+          break;
+        }
+        #endif
       }
     i++;
   }

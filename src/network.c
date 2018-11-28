@@ -7,16 +7,29 @@ extern chord_node_t mynode, *self, successorlist[SUCCESSORLIST_SIZE];
 
 #ifdef POSIX_SOCK
 int sock_wrapper_open(struct socket_wrapper *wrapper,chord_node_t *node,chord_node_t *target,int local_port,int remote_port){
-  return CHORD_OK;
+  (void)wrapper;
+  (void)node;
+  (void)target;
+  (void)local_port;
+  (void)remote_port;
+  return CHORD_ERR;
 }
 int sock_wrapper_recv(struct socket_wrapper *wrapper,unsigned char *buf, size_t buf_size,int flags) {
-  return CHORD_OK;
+  (void)wrapper;
+  (void)buf;
+  (void)buf_size;
+  (void)flags;
+  return CHORD_ERR;
 }
 int sock_wrapper_send(struct socket_wrapper *wrapper,unsigned char *buf, size_t buf_size) {
-  return CHORD_OK;
+  (void)wrapper;
+  (void)buf;
+  (void)buf_size;
+  return CHORD_ERR;
 }
 int sock_wrapper_close(struct socket_wrapper *wrapper) {
-  return CHORD_OK;
+  (void)wrapper;
+  return CHORD_ERR;
 }
 #endif
 
