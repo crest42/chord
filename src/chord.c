@@ -24,7 +24,8 @@ struct childs childs, *self_childs = &childs;
 chord_aggregation_t stats, *mystats = &stats;
 chord_hooks_t hooks;
 struct bootstrap_list bslist;
-
+chord_role_t role = CHORD_ROLE_ACTIVE;
+unsigned char msg_buf[MAX_MSG_SIZE];
 /* Static functions */
 
 static int reset_fingertable(void) {
@@ -52,15 +53,14 @@ static int set_nodeid(nodeid_t id) {
 static int
 update_successorlist(chord_node_t *src)
 {
-  unsigned char msg[CHORD_HEADER_SIZE + sizeof(nodeid_t)];
   marshal_msg(MSG_TYPE_COPY_SUCCESSORLIST,
                src->id,
                sizeof(nodeid_t),
                (unsigned char*)(&(mynode.id)),
-               msg);
+               msg_buf);
   chord_msg_t type =
     chord_send_block_and_wait(src,
-                              msg,
+                              msg_buf,
                               CHORD_HEADER_SIZE + sizeof(nodeid_t),
                               MSG_TYPE_COPY_SUCCESSORLIST_RESP,
                               (unsigned char*)(successorlist + 1),
@@ -74,16 +74,6 @@ update_successorlist(chord_node_t *src)
     return CHORD_ERR;
   }
 }
-
-
-/**
- * \brief Notify a node n' that we now consider it our successor.
- * This is needed because n' may want to select us as his new predecessor.
- *
- * @return CHORD_OK if everything is fine CHORD_ERR otherwise
- */
-static int
-notify(chord_node_t *target);
 
 /**
  * \brief Join a node into a chord network.
@@ -111,15 +101,14 @@ join(chord_node_t *target)
 static int
 request_predecessor(chord_node_t *target, chord_node_t *pre)
 {
-  unsigned char msg[CHORD_HEADER_SIZE];
   marshal_msg(MSG_TYPE_GET_PREDECESSOR,
                target->id,
                0,
                NULL,
-               msg);
+               msg_buf);
   chord_msg_t type =
     chord_send_block_and_wait(target,
-                              msg,
+                              msg_buf,
                               CHORD_HEADER_SIZE,
                               MSG_TYPE_GET_PREDECESSOR_RESP,
                               (unsigned char*)pre,
@@ -293,6 +282,40 @@ static nodeid_t parent_function(nodeid_t id) {
   }
 }
 
+/**
+ * \brief Notify a node n' that we now consider it our successor.
+ * This is needed because n' may want to select us as his new predecessor.
+ *
+ * @return CHORD_OK if everything is fine CHORD_ERR otherwise
+ */
+static int
+notify(chord_node_t *target)
+{
+  if (!target) {
+    DEBUG(ERROR, "notify target is NULL\n");
+    return CHORD_ERR;
+  }
+  DEBUG(INFO, "Notify successor %d\n", target->id);
+  marshal_msg(MSG_TYPE_NOTIFY,
+               target->id,
+               sizeof(chord_node_t),
+               (unsigned char*)(&mynode),
+               msg_buf);
+  chord_msg_t type =
+    chord_send_block_and_wait(target,
+                              msg_buf,
+                              CHORD_HEADER_SIZE + sizeof(chord_node_t),
+                              MSG_TYPE_NO_WAIT,
+                              NULL,
+                              0,
+                              NULL);
+  if (type == MSG_TYPE_CHORD_ERR) {
+    DEBUG(ERROR, "Error in notify returned msg type MSG_TYPE_CHORD_ERR\n");
+    return CHORD_ERR;
+  }
+  return CHORD_OK;
+}
+
 static int
 stabilize(chord_node_t *node)
 {
@@ -328,7 +351,7 @@ stabilize(chord_node_t *node)
       } else {
         (void)memcpy(my_additional.predecessor, my_additional.successor, sizeof(chord_node_t));
       }
-      if (!node_is_null(my_additional.successor)) {
+      if (!node_is_null(my_additional.successor) && role != CHORD_ROLE_EXTERNAL) {
         notify(my_additional.successor);
       }
     } else {
@@ -404,16 +427,15 @@ ping_node(chord_node_t *node)
   if (node_is_null(node)) {
     return false;
   }
-  unsigned char msg[CHORD_HEADER_SIZE + sizeof(nodeid_t)];
   marshal_msg(MSG_TYPE_PING,
                node->id,
                sizeof(nodeid_t),
                (unsigned char*)(&(mynode.id)),
-               msg);
+               msg_buf);
   nodeid_t retid = 0;
   chord_msg_t type =
     chord_send_block_and_wait(node,
-                              msg,
+                              msg_buf,
                               CHORD_HEADER_SIZE + sizeof(nodeid_t),
                               MSG_TYPE_PONG,
                               (unsigned char*)&retid,
@@ -444,14 +466,13 @@ check_successor(void)
 static int
 send_exit(chord_node_t *node, chord_node_t *update)
 {
-  unsigned char msg[CHORD_HEADER_SIZE + sizeof(chord_node_t)];
   marshal_msg(
-    MSG_TYPE_EXIT, node->id, sizeof(chord_node_t), (unsigned char*)update, msg);
+    MSG_TYPE_EXIT, node->id, sizeof(chord_node_t), (unsigned char*)update, msg_buf);
 
   while (true) {
     chord_msg_t type =
       chord_send_block_and_wait(node,
-                                msg,
+                                msg_buf,
                                 CHORD_HEADER_SIZE + sizeof(chord_node_t),
                                 MSG_TYPE_EXIT_ACK,
                                 NULL,
@@ -549,7 +570,6 @@ static int register_child(struct child *c){
   do {
     find_successor(my_additional.predecessor, &c->parent_suc, c->parent - 1);
   } while (c->parent_suc.id == self->id);
-  unsigned char msg[CHORD_HEADER_SIZE + sizeof(struct child)];
   unsigned char ret[sizeof(chord_node_t) + sizeof(chord_aggregation_t)];
 
   do {
@@ -565,10 +585,10 @@ static int register_child(struct child *c){
                c->parent_suc.id,
                sizeof(struct child),
                (unsigned char*)c,
-               msg);
+               msg_buf);
   type = chord_send_block_and_wait(&c->parent_suc,
-                                   msg,
-                                   sizeof(msg),
+                                   msg_buf,
+                                   CHORD_HEADER_SIZE + sizeof(struct child),
                                    MSG_TYPE_REGISTER_CHILD_OK,
                                    (unsigned char*)ret,
                                    sizeof(ret),
@@ -586,16 +606,15 @@ static int register_child(struct child *c){
 }
 
 static int refresh_parent(struct child *c) {
-  unsigned char msg[CHORD_HEADER_SIZE + sizeof(struct child)];
   marshal_msg(MSG_TYPE_REFRESH_CHILD,
               c->parent_suc.id,
               sizeof(struct child),
               (unsigned char*)c,
-              msg);
+              msg_buf);
   unsigned char ret[sizeof(chord_node_t) + sizeof(chord_aggregation_t)];
   chord_msg_t type =
     chord_send_block_and_wait(&c->parent_suc,
-                              msg,
+                              msg_buf,
                               CHORD_HEADER_SIZE + sizeof(struct child),
                               MSG_TYPE_REFRESH_CHILD_OK,
                               (unsigned char*)ret,
@@ -763,12 +782,11 @@ init_chord(const char* local_addr)
 int
 get_successorlist_id(chord_node_t *target, nodeid_t *id) {
   assert(target != NULL);
-  unsigned char msg[CHORD_HEADER_SIZE];
   marshal_msg(
-      MSG_TYPE_GET_SUCCESSORLIST_ID, target->id, 0, NULL, msg);
+      MSG_TYPE_GET_SUCCESSORLIST_ID, target->id, 0, NULL, msg_buf);
     chord_msg_t type =
       chord_send_block_and_wait(target,
-                                msg,
+                                msg_buf,
                                 CHORD_HEADER_SIZE,
                                 MSG_TYPE_GET_SUCCESSORLIST_ID_RESP,
                                 (unsigned char*)id,
@@ -786,15 +804,14 @@ static int chord_find_successor(chord_node_t *target, chord_node_t *ret, nodeid_
   int steps = 1;
   chord_msg_t query_type = MSG_TYPE_FIND_SUCCESSOR;
   DEBUG(INFO, "Start find successor ask: %d for %d\n", target->id, id);
-  unsigned char msg[CHORD_HEADER_SIZE + sizeof(nodeid_t)];
   while (final == NULL) {
     DEBUG(INFO,"steps neeeded %d\n",(steps));
     //(void)memset(msg, 0, sizeof(msg)); // TODO Remove
     marshal_msg(
-      query_type, tmp->id, sizeof(nodeid_t), (unsigned char*)&id, msg);
+      query_type, tmp->id, sizeof(nodeid_t), (unsigned char*)&id, msg_buf);
     chord_msg_t type =
       chord_send_block_and_wait(tmp,
-                                msg,
+                                msg_buf,
                                 CHORD_HEADER_SIZE + sizeof(nodeid_t),
                                 MSG_TYPE_FIND_SUCCESSOR_RESP,
                                 (unsigned char*)ret,
@@ -845,35 +862,6 @@ find_successor(chord_node_t *target, chord_node_t *ret, nodeid_t id)
 }
 
 int
-notify(chord_node_t *target)
-{
-  if (!target) {
-    DEBUG(ERROR, "notify target is NULL\n");
-    return CHORD_ERR;
-  }
-  DEBUG(INFO, "Notify successor %d\n", target->id);
-  unsigned char msg[CHORD_HEADER_SIZE + sizeof(chord_node_t)];
-  marshal_msg(MSG_TYPE_NOTIFY,
-               target->id,
-               sizeof(chord_node_t),
-               (unsigned char*)(&mynode),
-               msg);
-  chord_msg_t type =
-    chord_send_block_and_wait(target,
-                              msg,
-                              CHORD_HEADER_SIZE + sizeof(chord_node_t),
-                              MSG_TYPE_NO_WAIT,
-                              NULL,
-                              0,
-                              NULL);
-  if (type == MSG_TYPE_CHORD_ERR) {
-    DEBUG(ERROR, "Error in notify returned msg type MSG_TYPE_CHORD_ERR\n");
-    return CHORD_ERR;
-  }
-  return CHORD_OK;
-}
-
-int
 create_node(char* address, chord_node_t *node)
 {
   if (!address) {
@@ -909,6 +897,9 @@ create_node(char* address, chord_node_t *node)
 /*@null@*/ void*
 thread_wait_for_msg(void* n)
 {
+  if(role == CHORD_ROLE_EXTERNAL) {
+    return NULL;
+  }
   int iteration = 0;
   chord_node_t *node = (chord_node_t *)n;
   struct socket_wrapper s;
@@ -964,6 +955,7 @@ thread_periodic(void* n)
     assert(node->id > 0);
     i++;
 
+
     DEBUG(INFO, "Start stabilization Procedure\n");
     nodeid_t old = mynode.id;
     if (stabilize(node) == CHORD_OK) {
@@ -991,6 +983,10 @@ thread_periodic(void* n)
       remove_dead_node(my_additional.successor->id);
       pop_successor(my_additional.successor);
       DEBUG(INFO, "Update successor to %d\n", my_additional.successor->id);
+    }
+    if(role == CHORD_ROLE_EXTERNAL) {
+      //TODO: Need to get size anyway
+      continue;
     }
 
 

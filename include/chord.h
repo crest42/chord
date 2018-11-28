@@ -148,6 +148,13 @@ typedef enum msg_type
   MSG_TYPE_SYNC_REQ_FETCH_OK = 85
 } chord_msg_t;
 
+typedef enum chord_role
+{
+  CHORD_ROLE_ACTIVE   = 0, /*!< Able to storage as well as retrieve and insert data*/
+  CHORD_ROLE_STANDBY  = 1, /*!< Only store and retrieve data but not inserting*/
+  CHORD_ROLE_EXTERNAL = 2, /*!< Only retrieve and insert but no storage */
+} chord_role_t;
+
 /**
  * \brief A definition of a node
  *
