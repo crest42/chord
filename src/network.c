@@ -6,30 +6,75 @@ unsigned char wait_buf[MAX_MSG_SIZE];
 extern chord_node_t mynode, *self, successorlist[SUCCESSORLIST_SIZE];
 
 #ifdef POSIX_SOCK
+extern size_t read_b;
+extern size_t write_b;
+#include <sys/socket.h>
 int sock_wrapper_open(struct socket_wrapper *wrapper,chord_node_t *node,chord_node_t *target,int local_port,int remote_port){
-  (void)wrapper;
-  (void)node;
-  (void)target;
-  (void)local_port;
-  (void)remote_port;
-  return CHORD_ERR;
+  wrapper->sock = socket(AF_INET6,SOCK_DGRAM,0);
+  struct sockaddr_in6 *local = NULL, *remote = NULL;
+  if(node) {
+    local = &wrapper->local;
+    memset( local, 0, sizeof(struct sockaddr_in6) );
+    local->sin6_family = AF_INET6;
+    local->sin6_port = htons(local_port);
+    if(wrapper->any) {
+      local->sin6_addr = in6addr_any;
+    } else {
+      memcpy(&local->sin6_addr,&node->addr,sizeof(struct in6_addr));
+    }
+    int enable = 1;
+    if (setsockopt(wrapper->sock, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) < 0) {
+      DEBUG(ERROR,"setsockopt(SO_REUSEADDR) failed\n");
+      return CHORD_ERR;
+    }
+    errno = 0;
+    if(bind(wrapper->sock, (struct sockaddr *)local, sizeof( struct sockaddr_in6 )) < 0)
+    {
+      DEBUG(ERROR,"Unable to bind: %s\n",strerror(errno));
+      return CHORD_ERR;
+    }
+  }
+  if(target) {
+    remote = &wrapper->remote;
+    memset( remote, 0, sizeof(struct sockaddr_in6) );
+    remote->sin6_family = AF_INET6;
+    remote->sin6_port = htons(remote_port);
+    memcpy(&remote->sin6_addr,&target->addr,sizeof(struct sockaddr_in6));
+    errno = 0;
+    if(connect(wrapper->sock, (struct sockaddr *)remote, sizeof( struct sockaddr_in6 )) < 0)
+    {
+      DEBUG(ERROR,"Unable to connect: %s",strerror(errno));
+      return CHORD_ERR;
+    }
+  } else {
+    memset(&wrapper->remote,0,sizeof(wrapper->remote));
+  }
+  return CHORD_OK;
 }
 int sock_wrapper_recv(struct socket_wrapper *wrapper,unsigned char *buf, size_t buf_size,int flags) {
-  (void)wrapper;
-  (void)buf;
-  (void)buf_size;
-  (void)flags;
-  return CHORD_ERR;
+  memset(&wrapper->remote,0,sizeof(wrapper->remote));
+  if(flags > 0) {
+    struct timeval timeout;
+    timeout.tv_sec = flags;
+    timeout.tv_usec = 0;
+    if (setsockopt(wrapper->sock, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) < 0) {
+      DEBUG(ERROR,"setsockopt(SO_REUSEADDR) failed\n");
+      return CHORD_ERR;
+    }
+  }
+  socklen_t len = sizeof(wrapper->remote);
+  int ret = recvfrom(wrapper->sock,buf,buf_size,0,(struct sockaddr *)&wrapper->remote,&len);
+  read_b += ret;
+  return ret;
 }
 int sock_wrapper_send(struct socket_wrapper *wrapper,unsigned char *buf, size_t buf_size) {
-  (void)wrapper;
-  (void)buf;
-  (void)buf_size;
-  return CHORD_ERR;
+  int ret = sendto(wrapper->sock,buf,buf_size,0,(struct sockaddr *)&wrapper->remote,sizeof(wrapper->remote));
+  write_b += ret;
+  return ret;
 }
 int sock_wrapper_close(struct socket_wrapper *wrapper) {
-  (void)wrapper;
-  return CHORD_ERR;
+  close(wrapper->sock);
+  return CHORD_OK;
 }
 #endif
 

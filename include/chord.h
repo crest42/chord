@@ -189,6 +189,7 @@ struct socket_wrapper {
 #else
 struct socket_wrapper {
   int sock;
+  struct sockaddr_in6 local;
   struct sockaddr_in6 remote;
   bool any;
 };
