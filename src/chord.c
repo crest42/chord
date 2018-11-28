@@ -915,7 +915,7 @@ thread_wait_for_msg(void* n)
     if (wait_for_message(node, &s) == CHORD_ERR) {
       DEBUG(ERROR, "error in wait_for_message\n");
     }
-    thread_yield();
+    CHORD_YIELD();
   }
 
   /*@notreached@*/

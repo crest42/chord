@@ -19,9 +19,14 @@
 #include "net/sock/udp.h"
 #define TIMEOUT_DEF (2*US_PER_SEC)
 #define TIMEOUT(y) (y*US_PER_SEC)
+#define CHORD_YIELD(...) thread_yield()
 #else
+#include <unistd.h>
+#include <stdbool.h>
 #include <sys/socket.h>
 #define TIMEOUT (2)
+#define TIMEOUT_DEF (2)
+#define CHORD_YIELD(...) {}
 #endif
 
 typedef enum log_level
@@ -185,6 +190,7 @@ struct socket_wrapper {
 struct socket_wrapper {
   int sock;
   struct sockaddr_in6 remote;
+  bool any;
 };
 #endif
 
