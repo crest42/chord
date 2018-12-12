@@ -123,6 +123,7 @@ handle_ping(chord_msg_t type,
   return chord_send_nonblock_sock(msg, CHORD_HEADER_SIZE + sizeof(nodeid_t), s);
 }
 
+
 int
 handle_refresh_child(chord_msg_t type,
             unsigned char* data,
@@ -130,6 +131,7 @@ handle_refresh_child(chord_msg_t type,
             struct socket_wrapper *s,
             size_t msg_size)
 {
+  #ifdef CHORD_TREE_ENABLED
   (void)type;
   (void)msg_size;
   assert(type == MSG_TYPE_REFRESH_CHILD);
@@ -153,6 +155,14 @@ handle_refresh_child(chord_msg_t type,
   add_msg_cont((unsigned char *)mystats, msg,sizeof(chord_aggregation_t), CHORD_HEADER_SIZE + sizeof(chord_node_t));
 
   return chord_send_nonblock_sock(msg, sizeof(msg), s);
+  #else
+    (void)type;
+    (void)data;
+    (void)src;
+    (void)s;
+    (void)msg_size;
+    return CHORD_OK;
+  #endif
 }
 
 int
@@ -162,6 +172,7 @@ handle_register_child(chord_msg_t type,
             struct socket_wrapper *s,
             size_t msg_size)
 {
+  #ifdef CHORD_TREE_ENABLED
   assert(type == MSG_TYPE_REGISTER_CHILD);
   assert(msg_size > 0);
   assert(src > 0);
@@ -224,6 +235,14 @@ handle_register_child(chord_msg_t type,
   marshal_msg(ret, src, sizeof(chord_node_t), (unsigned char *)retnode, msg);
   add_msg_cont((unsigned char *)mystats, msg,sizeof(chord_aggregation_t), CHORD_HEADER_SIZE + sizeof(chord_node_t));
   return chord_send_nonblock_sock(msg, sizeof(msg), s);
+  #else
+    (void)type;
+    (void)data;
+    (void)src;
+    (void)s;
+    (void)msg_size;
+    return CHORD_OK;
+  #endif
 }
 
 int

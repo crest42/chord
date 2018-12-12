@@ -4,7 +4,6 @@
 unsigned char wait_buf[MAX_MSG_SIZE];
 
 extern chord_node_t mynode, *self, successorlist[SUCCESSORLIST_SIZE];
-
 #ifdef POSIX_SOCK
 extern size_t read_b;
 extern size_t write_b;
@@ -27,10 +26,9 @@ int sock_wrapper_open(struct socket_wrapper *wrapper,chord_node_t *node,chord_no
       DEBUG(ERROR,"setsockopt(SO_REUSEADDR) failed\n");
       return CHORD_ERR;
     }
-    errno = 0;
     if(bind(wrapper->sock, (struct sockaddr *)local, sizeof( struct sockaddr_in6 )) < 0)
     {
-      DEBUG(ERROR,"Unable to bind: %s\n",strerror(errno));
+      DEBUG(ERROR,"Unable to bind: %s %s %d\n",strerror(errno),buf,wrapper->sock);
       return CHORD_ERR;
     }
   }
@@ -40,7 +38,6 @@ int sock_wrapper_open(struct socket_wrapper *wrapper,chord_node_t *node,chord_no
     remote->sin6_family = AF_INET6;
     remote->sin6_port = htons(remote_port);
     memcpy(&remote->sin6_addr,&target->addr,sizeof(struct sockaddr_in6));
-    errno = 0;
     if(connect(wrapper->sock, (struct sockaddr *)remote, sizeof( struct sockaddr_in6 )) < 0)
     {
       DEBUG(ERROR,"Unable to connect: %s",strerror(errno));
@@ -302,8 +299,9 @@ chord_send_block_and_wait(chord_node_t *target,
   if (msg_size > bufsize) {
     msg_size = bufsize;
   }
-  assert(buf != NULL);
-  memcpy(buf, msg_content, msg_size);
+  if(buf != NULL) {
+    memcpy(buf, msg_content, msg_size);
+  }
   if(ret_size)
     *ret_size = msg_size;
   sock_wrapper_close(&sock);

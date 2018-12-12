@@ -8,25 +8,34 @@
  * @see http://nms.csail.mit.edu/papers/chord.pdf
  * @see https://pdos.csail.mit.edu/papers/ton:chord/paper-ton.pdf
  */
+#ifdef POSIX_SOCK
+#define _GNU_SOURCE
+#include <sys/time.h>
+#include <sys/resource.h>
+#include <pthread.h>
+extern pthread_mutex_t mutex;
 
+#endif
 #include "../include/chord.h"
 #include "../include/chord_internal.h"
 #include "../include/network.h"
 #include "../include/bootstrap.h"
 #include "../include/chord_util.h"
-
 chord_node_t mynode, *self = &mynode;
 chord_node_additional_t my_additional;
 chord_node_t predecessor;
 struct fingertable_entry fingertable[FINGERTABLE_SIZE];
 chord_node_t successorlist[SUCCESSORLIST_SIZE];
-struct childs childs, *self_childs = &childs;
+#ifdef CHORD_TREE_ENABLED
+  struct childs childs, *self_childs = &childs;
+#endif
 chord_aggregation_t stats, *mystats = &stats;
 chord_hooks_t hooks;
 struct bootstrap_list bslist;
 chord_role_t role = CHORD_ROLE_ACTIVE;
 unsigned char msg_buf[MAX_MSG_SIZE];
 /* Static functions */
+int steps = 1;
 
 static int reset_fingertable(void) {
   nodeid_t start = 0;
@@ -263,6 +272,7 @@ static int init_successorlist(void) {
 }
 
 static nodeid_t parent_function(nodeid_t id) {
+  #ifdef CHORD_TREE_ENABLED
   int k = 2;
   nodeid_t alpha = (nodeid_t)CHORD_TREE_ROOT;
   int a = (id - alpha);
@@ -280,6 +290,10 @@ static nodeid_t parent_function(nodeid_t id) {
     assert(true);
     return CHORD_ERR;
   }
+  #else
+  (void)id;
+  return CHORD_OK;
+  #endif
 }
 
 /**
@@ -535,7 +549,13 @@ static bool in_sync(void) {
 }
 
 static bool is_root(chord_node_t *n, chord_node_t *pre) {
+  #ifdef CHORD_TREE_ENABLED
   return in_interval(pre,n,(uint32_t)CHORD_TREE_ROOT - 1);
+  #else
+    (void)n;
+    (void)pre;
+    return false;
+  #endif
 }
 
 static int get_parent(struct child *c) {
@@ -553,6 +573,9 @@ static int get_parent(struct child *c) {
 }
 
 static int register_child(struct child *c){
+  #ifndef CHORD_TREE_ENABLED
+    return CHORD_OK;
+  #endif
   assert(c != NULL);
   struct child new;
   (void)memset(&new, 0, sizeof(new));
@@ -570,9 +593,11 @@ static int register_child(struct child *c){
   do {
     find_successor(my_additional.predecessor, &c->parent_suc, c->parent - 1);
   } while (c->parent_suc.id == self->id);
+  steps_reg_find = steps;
   unsigned char ret[sizeof(chord_node_t) + sizeof(chord_aggregation_t)];
-
+  steps_reg = 0;
   do {
+  steps_reg++;
   DEBUG(INFO,
         "Register Child P^%d(%d) = %d on %d with size: %d and node: %d\n",
         c->i,
@@ -606,6 +631,9 @@ static int register_child(struct child *c){
 }
 
 static int refresh_parent(struct child *c) {
+  #ifndef CHORD_TREE_ENABLED
+    return CHORD_OK;
+  #endif
   marshal_msg(MSG_TYPE_REFRESH_CHILD,
               c->parent_suc.id,
               sizeof(struct child),
@@ -645,6 +673,8 @@ static int get_size(void) {
 #endif
 
 static int aggregate(chord_aggregation_t *aggregation) {
+  #ifdef CHORD_TREE_ENABLED
+
   uint32_t nodes = 0, available = 0, used = 0;
   struct childs* c = &childs;
   time_t systime = time(NULL);
@@ -663,15 +693,19 @@ static int aggregate(chord_aggregation_t *aggregation) {
   aggregation->available = available + self->size;
   aggregation->used = used + self->used;
   return CHORD_OK;
+  #else
+  (void)aggregation;
+  return CHORD_OK;
+  #endif
 }
 
 static int
 start(/*@NULL@*/ chord_node_t *node)
 {
   if (node) {
-    if (CHORD_CHANGE_ID) {
+    #ifdef CHORD_CHANGE_ID
       set_nodeid(find_splitnode(node));
-    }
+    #endif
 
     for (int i = 1; i <= 3 && (join(node) == CHORD_ERR); i++) {
       DEBUG(ERROR,
@@ -681,9 +715,9 @@ start(/*@NULL@*/ chord_node_t *node)
       sleep(CHORD_PERIODIC_SLEEP);
     }
   } else {
-    if (CHORD_CHANGE_ID) {
+    #ifdef CHORD_CHANGE_ID
       set_nodeid((nodeid_t)(CHORD_RING_SIZE-1));
-    }
+    #endif
     copy_node(&mynode, my_additional.successor);
     DEBUG(INFO, "Create new chord ring %d\n", my_additional.successor->id);
     for (int i = 0; i < FINGERTABLE_SIZE; i++) {
@@ -737,7 +771,9 @@ init_chord(const char* local_addr)
   (void)memset(&mynode, 0, sizeof(mynode));
   (void)memset(&my_additional, 0, sizeof(my_additional));
   (void)memset(&predecessor, 0, sizeof(predecessor));
+  #ifdef CHORD_TREE_ENABLED
   (void)memset(&childs, 0, sizeof(struct child));
+  #endif
   (void)memset(&bslist, 0, sizeof(struct bootstrap_list));
   bslist.size = BSLIST_SIZE;
   time_start = time(NULL);
@@ -801,7 +837,7 @@ get_successorlist_id(chord_node_t *target, nodeid_t *id) {
 
 static int chord_find_successor(chord_node_t *target, chord_node_t *ret, nodeid_t id) {
   chord_node_t *final = NULL, *tmp = target;
-  int steps = 1;
+  steps = 1;
   chord_msg_t query_type = MSG_TYPE_FIND_SUCCESSOR;
   DEBUG(INFO, "Start find successor ask: %d for %d\n", target->id, id);
   while (final == NULL) {
@@ -897,11 +933,18 @@ create_node(char* address, chord_node_t *node)
 /*@null@*/ void*
 thread_wait_for_msg(void* n)
 {
+
   if(role == CHORD_ROLE_EXTERNAL) {
     return NULL;
   }
+  #ifdef POSIX_SOCK
+    struct timespec ts;
+    timespec_get(&ts, TIME_UTC);
+    struct rusage *usage = (struct rusage *)n;
+    w_start = ts.tv_sec + ts.tv_nsec;
+  #endif
   int iteration = 0;
-  chord_node_t *node = (chord_node_t *)n;
+  chord_node_t *node = self;
   struct socket_wrapper s;
   (void)memset(&s, 0, sizeof(s));
   s.any = true;
@@ -910,6 +953,13 @@ thread_wait_for_msg(void* n)
     return NULL;
   }
   while (true) {
+    #ifdef POSIX_SOCK
+      pthread_mutex_lock (&mutex);
+      timespec_get(&ts, TIME_UTC);
+      w_atm = (ts.tv_sec*1000000000) + ts.tv_nsec;
+      getrusage(RUSAGE_THREAD, usage);
+      pthread_mutex_unlock (&mutex);
+    #endif
     iteration++;
     DEBUG(INFO, "wait for message run %d\n", iteration);
     if (wait_for_message(node, &s) == CHORD_ERR) {
@@ -926,12 +976,24 @@ thread_wait_for_msg(void* n)
 /*@null@*/ void*
 thread_periodic(void* n)
 {
-  (void)n;
+   #ifdef POSIX_SOCK
+    struct timespec ts;
+    timespec_get(&ts, TIME_UTC);
+    struct rusage *usage = (struct rusage *)n;
+    p_start = ts.tv_sec + ts.tv_nsec;
+  #endif
   int i = 0;
   chord_node_t *node = &mynode;
   struct child c;
   (void)memset(&c, 0, sizeof(c));
   while (true) {
+   #ifdef POSIX_SOCK
+      pthread_mutex_lock (&mutex);
+      timespec_get(&ts, TIME_UTC);
+      p_atm = (ts.tv_sec*1000000000) + ts.tv_nsec;
+      getrusage(RUSAGE_THREAD, usage);
+      pthread_mutex_unlock (&mutex);
+    #endif
     atm = time(NULL);
     #ifdef DEBUG_ENABLE
     time_t runtime = atm - time_start;
