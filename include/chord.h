@@ -42,7 +42,8 @@
 #define CHORD_HEADER_SIZE                                                      \
   (CHORD_MSG_COMMAND_SIZE + CHORD_MSG_LENGTH_SIZE + CHORD_MSG_DST_ID_SIZE +    \
    CHORD_MSG_SRC_ID_SIZE)
-#define MAX_MSG_SIZE (CHORD_HEADER_SIZE + SUCCESSORLIST_SIZE * sizeof(chord_node_t))
+#define MAX_CONTENT_SIZE ((SUCCESSORLIST_SIZE * sizeof(chord_node_t)))
+#define MAX_MSG_SIZE (CHORD_HEADER_SIZE + MAX_CONTENT_SIZE)
 #define CHORD_MSG_MAX_CONTENT_SIZE (MAX_MSG_SIZE - CHORD_HEADER_SIZE)
 
 
@@ -151,7 +152,7 @@ typedef enum msg_type
   MSG_TYPE_GET_SUCCESSORLIST_ID_RESP = 81,
   MSG_TYPE_GET_SUCCESSORLIST_ID_EFAIL = 82,
   MSG_TYPE_SYNC_REQ_RESP = 83,
-  MSG_TYPE_SYNC_REQ_FETCH_OK = 85
+  MSG_TYPE_SYNC_REQ_FETCH_OK = 84
 } chord_msg_t;
 
 typedef enum chord_role
@@ -198,6 +199,7 @@ struct socket_wrapper {
 
 typedef struct aggregate {
   uint32_t nodes;
+  uint32_t depth;
   uint32_t available;
   uint32_t used;
 } chord_aggregation_t;

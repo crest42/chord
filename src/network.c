@@ -10,6 +10,7 @@ extern size_t write_b;
 #include <sys/socket.h>
 int sock_wrapper_open(struct socket_wrapper *wrapper,chord_node_t *node,chord_node_t *target,int local_port,int remote_port){
   wrapper->sock = socket(AF_INET6,SOCK_DGRAM,0);
+  wrapper->any = (wrapper->any) ? !wrapper->any : false;
   struct sockaddr_in6 *local = NULL, *remote = NULL;
   if(node) {
     local = &wrapper->local;
@@ -37,7 +38,7 @@ int sock_wrapper_open(struct socket_wrapper *wrapper,chord_node_t *node,chord_no
     memset( remote, 0, sizeof(struct sockaddr_in6) );
     remote->sin6_family = AF_INET6;
     remote->sin6_port = htons(remote_port);
-    memcpy(&remote->sin6_addr,&target->addr,sizeof(struct sockaddr_in6));
+    memcpy(&remote->sin6_addr,&target->addr,sizeof(struct in6_addr));
     if(connect(wrapper->sock, (struct sockaddr *)remote, sizeof( struct sockaddr_in6 )) < 0)
     {
       DEBUG(ERROR,"Unable to connect: %s",strerror(errno));

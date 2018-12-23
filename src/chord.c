@@ -16,6 +16,7 @@
 extern pthread_mutex_t mutex;
 
 #endif
+#include <stdio.h>
 #include "../include/chord.h"
 #include "../include/chord_internal.h"
 #include "../include/network.h"
@@ -30,7 +31,7 @@ chord_node_t successorlist[SUCCESSORLIST_SIZE];
   struct childs childs, *self_childs = &childs;
 #endif
 chord_aggregation_t stats, *mystats = &stats;
-chord_hooks_t hooks;
+chord_hooks_t hooks = {.periodic_data = NULL, .periodic_hook = NULL};
 struct bootstrap_list bslist;
 chord_role_t role = CHORD_ROLE_ACTIVE;
 unsigned char msg_buf[MAX_MSG_SIZE];
@@ -95,6 +96,7 @@ static int
 join(chord_node_t *target)
 {
   (void)memset(my_additional.predecessor, 0, sizeof(chord_node_t));
+  assert(target->id > 0);
   if (find_successor(target, my_additional.successor, self->id) == CHORD_ERR) {
     return CHORD_ERR;
   }
@@ -177,7 +179,9 @@ static nodeid_t find_splitnode(chord_node_t *target) {
   (void)memset(&r, 0, sizeof(r));
   (void)memset(&pre, 0, sizeof(pre));
   int i = 0, set = 0;
-  find_successor(target, &r, mynode.id);
+  while(find_successor(target, &r, mynode.id) != CHORD_OK) {
+    sleep(1);
+  }
   chord_node_t list[CHORD_RING_BITS];
   (void)memset(list, 0, sizeof(list));
   for (i = 0; i < CHORD_RING_BITS; i++) {
@@ -674,7 +678,6 @@ static int get_size(void) {
 
 static int aggregate(chord_aggregation_t *aggregation) {
   #ifdef CHORD_TREE_ENABLED
-
   uint32_t nodes = 0, available = 0, used = 0;
   struct childs* c = &childs;
   time_t systime = time(NULL);
@@ -688,6 +691,9 @@ static int aggregate(chord_aggregation_t *aggregation) {
       available += a;
       used += u;
     }
+  }
+  if(is_root(&mynode, my_additional.predecessor)) {
+    aggregation->depth = 1;
   }
   aggregation->nodes = ++nodes;
   aggregation->available = available + self->size;
@@ -801,7 +807,6 @@ init_chord(const char* local_addr)
   a->used = 0;
   a->nodes = 0;
 
-  hooks.periodic_hook = NULL;
   init_callbacks();
   set_callback(MSG_TYPE_PING, handle_ping);
   set_callback(MSG_TYPE_EXIT, handle_exit);
@@ -1063,6 +1068,7 @@ thread_periodic(void* n)
           (void)memset(&c.parent_suc, 0, sizeof(chord_node_t));
         }
       }
+      stats.depth++;
     } else {
       (void)memcpy(&stats, &c.aggregation, sizeof(chord_aggregation_t));
       DEBUG(INFO,

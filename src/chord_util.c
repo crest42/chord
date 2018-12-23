@@ -69,6 +69,7 @@ in_interval(chord_node_t *first, chord_node_t *second, nodeid_t id)
 uint32_t
 get_mod_of_hash(unsigned char* hash, int modulo)
 {
+  //TODO FIX!
   uint32_t r = 0;
   for (int i = 0; i < HASH_DIGEST_SIZE; ++i)
     r = (r * 10 + (uint32_t)hash[i]) % modulo;
